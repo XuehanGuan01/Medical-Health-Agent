@@ -1,0 +1,27 @@
+# ============================================================
+# Medical-Health-Agent Python 依赖
+# 安装: pip install -r requirements.txt
+# ============================================================
+
+# --- LLM & Agent 框架 ---
+langchain>=0.3.0
+langchain-openai>=0.3.0
+langchain-community>=0.3.0
+langgraph>=0.2.0
+
+# --- 数据管道 (Phase 1) ---
+fastapi>=0.115.0
+uvicorn[standard]>=0.34.0
+sqlalchemy>=2.0.0
+pydantic>=2.0.0
+python-dateutil>=2.9.0
+numpy>=1.26.0
+
+# --- RAG 向量库 (Phase 2) ---
+chromadb>=0.5.0
+sentence-transformers>=3.0.0
+
+# --- 工具库 ---
+python-dotenv>=1.0.0
+tqdm>=4.66.0
+httpx>=0.27.0
