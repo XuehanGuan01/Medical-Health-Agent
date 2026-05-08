@@ -12,13 +12,15 @@
 
 相对于 v1 版本，本版新增/改进：
 
-| # | 变更 | 说明 |
-|---|------|------|
-| 1 | **URL 机制与数据流详解** | 新增 §2.2–2.3，说明 Health Auto Export REST API 的 URL 路由机制、请求构造方式、完整数据流 |
-| 2 | **数据类目全景图** | 新增 §1.3，按优先级分 Tier 1/2/3，明确主流数据与扩展数据的取舍策略 |
-| 3 | **逐文件设计说明** | 每个代码文件前增加「文件角色」「输入→输出」「关键设计决策」说明块 |
-| 4 | **代码审查 & 优化** | 修复 v1 代码中的问题：`normalize_date` 空转、`datetime.utcnow` 已弃用、缺少空值分层处理等 |
-| 5 | **待确认问题清单** | 新增附录 C，记录所有模糊点和待用户确认的事项 |
+| #   | 变更               | 说明                                                                 |
+| --- | ---------------- | ------------------------------------------------------------------ |
+| 1   | **URL 机制与数据流详解** | 新增 §2.2–2.3，说明 Health Auto Export REST API 的 URL 路由机制、请求构造方式、完整数据流 |
+| 2   | **数据类目全景图**      | 新增 §1.3，按优先级分 Tier 1/2/3，明确主流数据与扩展数据的取舍策略                          |
+| 3   | **逐文件设计说明**      | 每个代码文件前增加「文件角色」「输入→输出」「关键设计决策」说明块                                  |
+| 4   | **代码审查 & 优化**    | 修复 v1 代码中的问题：`normalize_date` 空转、`datetime.utcnow` 已弃用、缺少空值分层处理等   |
+| 5   | **待确认问题清单**      | 新增附录 C，记录所有模糊点和待用户确认的事项                                            |
+| 6   | **ngrok URL 策略**   | 新增 §2.2.3 ngrok 随机域名应对方案、§5.2 一键启动脚本、§5.6 Cloudflare Tunnel 对比    |
+| 7   | **附录 C 确认清零**    | 基于本地 docs/ 的两份参考文档，确认了 JSON 结构、8 种数据类型、日期格式等（§C.1/C.2）          |
 
 ---
 
@@ -197,16 +199,16 @@ Health Auto Export 支持 150+ 健康指标，以下按**数据可用性**和**�
 
 进入 App → **Automations** 标签 → 右上角 **+** → **API Export**：
 
-| 配置项 | 值 | 说明 |
-|--------|-----|------|
-| URL | `https://<your-ngrok-url>/api/v1/health/sync` | 见 §2.2 URL 机制 |
-| Format | JSON | 仅支持 JSON |
-| Period | Last Sync | 增量同步（每次只发上次同步至今的新数据） |
-| Interval | Minutes | 以分钟为间隔单位 |
-| Sync | 30 Minutes | 每 30 分钟自动触发一次 |
-| Data Type | Health Metrics + Workouts | 同时发送健康指标和训练数据 |
-| Custom Headers | `Authorization: Bearer <your-api-key>` | API Key 鉴权（见 config.py） |
-| Custom Headers | `Content-Type: application/json` | 通常自动添加 |
+| 配置项            | 值                                             | 说明                      |
+| -------------- | --------------------------------------------- | ----------------------- |
+| URL            | `https://<your-ngrok-url>/api/v1/health/sync` | 见 §2.2 URL 机制           |
+| Format         | JSON                                          | 仅支持 JSON                |
+| Period         | Last Sync                                     | 增量同步（每次只发上次同步至今的新数据）    |
+| Interval       | Minutes                                       | 以分钟为间隔单位                |
+| Sync           | 30 Minutes                                    | 每 30 分钟自动触发一次           |
+| Data Type      | Health Metrics + Workouts                     | 同时发送健康指标和训练数据           |
+| Custom Headers | `Authorization: Bearer <your-api-key>`        | API Key 鉴权（见 config.py） |
+| Custom Headers | `Content-Type: application/json`              | 通常自动添加                  |
 
 **Step 4 — 启用自动化**
 
@@ -281,13 +283,34 @@ iPhone (Health Auto Export)
 - App 会**持久化保存** URL，不需要每次重新配置
 - 如果 URL 不可达，App 会静默失败并在 Automation 列表中显示错误状态
 
-#### 2.2.3 当前状态：URL 待定
+#### 2.2.3 ngrok URL 随机变化 & 应对策略
 
-> **当前阶段**：代码尚未部署，URL 路由尚未生成。等后端代码在本地启动并通过 ngrok 暴露后，将获得类似以下格式的 URL：
-> ```
-> https://<random-id>.ngrok-free.app/api/v1/health/sync
-> ```
-> 将此 URL 填入 Health Auto Export 的 Automation 配置即可。
+> **⚠️ 关键问题**：ngrok 免费版每次重启都会生成**随机域名**（如 `abc123.ngrok-free.app` → `xyz789.ngrok-free.app`），这意味着每次 ngrok 重启后需要将新 URL 重新填入 iPhone 上的 Health Auto Export App。
+
+**三种应对方案**：
+
+| 方案 | 费用 | 域名 | 适合场景 |
+|------|------|------|---------|
+| **A. 启动脚本自动打印 URL** | 免费 | 随机（每次重启变） | Phase 1 快速落地（推荐） |
+| **B. ngrok Reserved Domain** | $10/月 | 固定 | 需要稳定域名但不换工具 |
+| **C. Cloudflare Tunnel** | 免费 | 固定（需自有域名） | 长期稳定运行 |
+
+**方案 A 详细操作**（推荐 Phase 1 使用）：
+
+每次启动数据管道时，脚本自动获取 ngrok 当前公网 URL 并打印，用户复制到 iPhone 即可。实现见 §5.2 的 `start_pipeline.sh` 一键启动脚本。
+
+**日常流程**（约 30 秒完成）：
+1. PC 端执行 `bash start_pipeline.sh`
+2. 脚本输出 `https://<id>.ngrok-free.app/api/v1/health/sync`
+3. 在 iPhone Health Auto Export → Automation → 粘贴 URL
+4. ngrok 运行期间 URL 不变；重启 ngrok 后重复步骤 1-3
+
+> **免费版 ngrok 限制总结**：
+> - 随机域名（每次重启变）
+> - 每月 1GB 流量（个人健康数据足够）
+> - 每分钟最多 40 个连接
+> - 会话时长可能有闲置断开（数小时）
+> - 适合个人开发测试，长期方案见 §5.6 Cloudflare Tunnel 对比
 
 
 ### 2.3 端到端数据流（含数据格式转换）
@@ -1770,22 +1793,98 @@ python webhook_server.py
 curl http://localhost:8000/api/v1/health/status
 ```
 
-### 5.2 使用 ngrok 暴露公网 URL
+### 5.2 使用 ngrok + 一键启动脚本（推荐）
+
+**Step 1 — 安装 ngrok**
 
 ```bash
-# 1. 安装 ngrok（https://ngrok.com/download）
-# 2. 注册免费账号 → 获取 authtoken
+# 下载 ngrok（https://ngrok.com/download）
+# 注册免费账号 → 获取 authtoken
 ngrok config add-authtoken <your-token>
-
-# 3. 启动隧道
-ngrok http 8000
-
-# 输出:
-# Forwarding  https://abc123.ngrok-free.app → http://localhost:8000
-#
-# Health Auto Export URL 配置为:
-# https://abc123.ngrok-free.app/api/v1/health/sync
 ```
+
+**Step 2 — 创建一键启动脚本 `start_pipeline.sh`**
+
+```bash
+#!/bin/bash
+# start_pipeline.sh — 一键启动 FastAPI + ngrok，自动获取公网 URL
+set -e
+
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+echo "============================================"
+echo "  Medical-Health-Agent 数据管道启动中..."
+echo "============================================"
+
+# 1. 检查依赖
+if [ ! -f "$PROJECT_DIR/data_pipeline/webhook_server.py" ]; then
+    echo "❌ 找不到 webhook_server.py，请确认路径正确"
+    exit 1
+fi
+
+# 2. 启动 FastAPI
+cd "$PROJECT_DIR"
+python -m data_pipeline.webhook_server &
+FASTAPI_PID=$!
+echo "  FastAPI PID: $FASTAPI_PID"
+sleep 2
+
+# 3. 启动 ngrok
+ngrok http 8000 --log=stdout > /tmp/ngrok.log 2>&1 &
+NGROK_PID=$!
+echo "  ngrok PID:   $NGROK_PID"
+sleep 3
+
+# 4. 从 ngrok API 获取当前公网 URL
+NGROK_URL=$(curl -s --max-time 5 http://localhost:4040/api/tunnels | python -c "
+import sys, json
+try:
+    tunnels = json.load(sys.stdin)['tunnels']
+    url = next(t['public_url'] for t in tunnels if t['public_url'].startswith('https'))
+    print(url)
+except Exception:
+    print('UNKNOWN')
+")
+
+if [ "$NGROK_URL" = "UNKNOWN" ] || [ -z "$NGROK_URL" ]; then
+    echo "⚠️  无法自动获取 ngrok URL，请检查 ngrok 是否正常启动"
+    echo "  手动查看: cat /tmp/ngrok.log"
+else
+    echo ""
+    echo "============================================"
+    echo "  ✅ 数据管道已就绪"
+    echo "============================================"
+    echo "  本地 FastAPI:  http://localhost:8000"
+    echo "  ngrok 公网:    ${NGROK_URL}"
+    echo ""
+    echo "  📱 请在 iPhone Health Auto Export 中配置:"
+    echo "     URL: ${NGROK_URL}/api/v1/health/sync"
+    echo "     Authorization: Bearer <your-api-key>"
+    echo "============================================"
+fi
+
+# 5. 保持运行
+echo ""
+echo "按 Ctrl+C 停止所有服务..."
+trap "kill $FASTAPI_PID $NGROK_PID 2>/dev/null; exit 0" INT TERM
+wait
+```
+
+**Step 3 — 启动**
+
+```bash
+chmod +x start_pipeline.sh
+bash start_pipeline.sh
+```
+
+**日常操作流程**（约 30 秒）：
+1. PC 端执行 `bash start_pipeline.sh`
+2. 复制脚本输出的 `https://<id>.ngrok-free.app/api/v1/health/sync`
+3. 在 iPhone Health Auto Export → Automation → REST API → URL 粘贴
+4. 点击 "手动导出" 测试连通性
+5. 确认成功后启用 Automation 开关
+
+> **⚠️ ngrok 重启后 URL 会变**，需要重复步骤 1-4。ngrok 运行期间不重启则 URL 保持不变。
 
 ### 5.3 发送测试数据
 
@@ -1826,8 +1925,23 @@ docker run -d -p 8000:8000 \
 
 1. **修改 API Key**：`export HEALTH_API_KEY=<random-64-char-string>`
 2. **HTTPS**：ngrok 免费版自带 HTTPS（TLS 终止在 ngrok 端），本地无需配置证书
-3. **生产方案**：长期运行建议用 Cloudflare Tunnel 替代 ngrok（免费且无连接数限制）
+3. **生产方案**：长期运行建议用 Cloudflare Tunnel 替代 ngrok（免费、固定域名），详见 §5.6 对比
 4. **Nginx 配置**（自建公网服务器时）：`client_max_body_size 50M;`
+
+### 5.6 ngrok vs Cloudflare Tunnel 对比
+
+> 详细对比见 `docs/ngrok-vs-cloudflare-tunnel.md`。此处给出结论：
+
+| 维度 | ngrok 免费版 | Cloudflare Tunnel |
+|------|-------------|-------------------|
+| 费用 | 免费 | 免费 |
+| 域名 | 随机（每次重启变） | 固定（需自有域名） |
+| 配置难度 | 极低（一条命令） | 中等（需域名 DNS 配置） |
+| 流量限制 | 1GB/月 | 无 |
+| 连接稳定性 | 有闲置断开 | 稳定 |
+| Phase 1 推荐 | ✅ 快速落地 | 后续迁移 |
+
+**推荐策略**：Phase 1 使用 ngrok 快速打通数据流，验证可行后切换到 Cloudflare Tunnel 获得固定域名。
 
 ---
 
@@ -2118,15 +2232,15 @@ summary = {
 
 ## 附录 B：常见问题排查
 
-| 问题 | 可能原因 | 排查步骤 |
-|------|---------|---------|
-| iOS 端同步失败（红色标记） | ngrok URL 过期 / 网络不通 | 1. 重启 ngrok 2. 更新 App 中的 URL 3. 在 iPhone Safari 中打开 URL 测试 |
-| `401 Unauthorized` | API Key 不匹配 | 1. 检查环境变量 `HEALTH_API_KEY` 2. 检查 App Custom Headers 中 `Authorization: Bearer <key>` |
-| `400 Bad Request` | JSON 结构与 Pydantic 模型不匹配 | 1. 查看服务端日志中的实际 payload 2. 对比 models.py 中的字段定义 |
-| 日期解析为 None | 新格式未在 `_parse_datetime` 中覆盖 | 1. 查看日志中的 failed datetime 原始字符串 2. 在 `_parse_datetime` 中增加对应的格式规则 |
-| 聚合数据为空 | metric_type 不在 `AGGREGATION_METRICS` 中 | 检查 `config.py` 的 `AGGREGATION_METRICS` 列表 |
-| 数据已写入但 value 全是 null | Health Auto Export 版本不同导致字段名变化 | 使用 `GET /raw` 查看 `extra` 列的实际 JSON，对比 models.py 的字段定义 |
-| 睡眠数据仅有 "inBed" 无时长 | "inBed" 阶段 qty 字段为空是正常的 | 时长通过 `endDate - startDate` 计算（已在代码中处理） |
+| 问题                   | 可能原因                                   | 排查步骤                                                                                |
+| -------------------- | -------------------------------------- | ----------------------------------------------------------------------------------- |
+| iOS 端同步失败（红色标记）      | ngrok URL 过期 / 网络不通                    | 1. 重启 ngrok 2. 更新 App 中的 URL 3. 在 iPhone Safari 中打开 URL 测试                          |
+| `401 Unauthorized`   | API Key 不匹配                            | 1. 检查环境变量 `HEALTH_API_KEY` 2. 检查 App Custom Headers 中 `Authorization: Bearer <key>` |
+| `400 Bad Request`    | JSON 结构与 Pydantic 模型不匹配                | 1. 查看服务端日志中的实际 payload 2. 对比 models.py 中的字段定义                                       |
+| 日期解析为 None           | 新格式未在 `_parse_datetime` 中覆盖            | 1. 查看日志中的 failed datetime 原始字符串 2. 在 `_parse_datetime` 中增加对应的格式规则                   |
+| 聚合数据为空               | metric_type 不在 `AGGREGATION_METRICS` 中 | 检查 `config.py` 的 `AGGREGATION_METRICS` 列表                                           |
+| 数据已写入但 value 全是 null | Health Auto Export 版本不同导致字段名变化         | 使用 `GET /raw` 查看 `extra` 列的实际 JSON，对比 models.py 的字段定义                               |
+| 睡眠数据仅有 "inBed" 无时长   | "inBed" 阶段 qty 字段为空是正常的                | 时长通过 `endDate - startDate` 计算（已在代码中处理）                                              |
 
 ---
 
@@ -2134,37 +2248,178 @@ summary = {
 
 > **以下事项需要用户确认或提供信息后才能最终确定。**
 
-### C.1 需要确认的事项
+### C.1 需要确认的事项（已基于本地 docs 更新）
 
-| # | 问题 | 影响范围 | 优先级 |
-|---|------|---------|--------|
-| 1 | **Health Auto Export REST API 文档** — 无法访问 `help.healthyapps.dev`，文档中的具体 JSON schema、可选配置项、错误码等无法验证。需要用户将网页内容加载到本地文件供分析。 | models.py 的字段定义可能有遗漏 | **高** |
-| 2 | **Health Auto Export Export Format 文档** — 同上，无法确认 150+ 指标的具体字段名映射。当前代码基于 v1 文档中的示例推断。 | Tier 2/3 指标接入时的字段名 | **高** |
-| 3 | **Health Auto Export 实际 JSON 结构** — 是否总是 `{"data": {"metrics": [...], "workouts": [...]}}` 格式？不同版本是否有差异？ | `HealthSyncRequest` 的兼容性 | **中** |
-| 4 | **睡眠分析阶段的字段名** — 实际 App 发送的睡眠阶段 (`value` 字段) 是否确实为 `"inBed"`, `"asleepREM"`, `"asleepDeep"`, `"asleepCore"`？ | 睡眠聚合的逻辑 | **中** |
-| 5 | **多用户场景** — 当前 `target` 参数预留了多用户标识，实际是否需要？如果单人使用，可以简化。 | webhook_server.py 的 target 参数 | **低** |
-| 6 | **ngrok 替代方案偏好** — 是否考虑 Cloudflare Tunnel（免费且不限连接数）？还是 ngrok 免费版（每月 1GB 带宽限制）已足够？ | 部署方案 | **低** |
+| #   | 问题               | 状态       | 结论                                                                                                                                                                                                                                         |
+| --- | ---------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | REST API 文档      | ✅ 已确认    | 文档已放入 `docs/`。确认：POST 请求、JSON/CSV 格式、自定义 Headers（`Authorization: Bearer` 或 `X-API-Key`）、自动添加 `automation-name`/`automation-id`/`session-id` 等 header、支持批量请求、日期范围可选（默认/自上次同步/今天/昨天/过去7天）。iOS 锁定状态下无法访问 HealthKit。                           |
+| 2   | Export Format 文档 | ✅ 已确认    | 文档已放入 `docs/`。确认：JSON 顶层 `{"data": {...}}` 包裹，含 8 种数据类型：`metrics`、`workouts`、`stateOfMind`、`medications`、`symptoms`、`cycleTracking`、`ecg`、`heartRateNotifications`。日期格式 `yyyy-MM-dd HH:mm:ss Z`（如 `2024-02-06 14:30:00 -0800`）。导出版本 V2 推荐。 |
+| 3   | JSON 结构确认        | ✅ 已确认    | 文档确认 `{"data": {"metrics": [...], "workouts": [...], ...}}` 为 V2 标准格式。当前 `HealthSyncRequest` 兼容直接传和 `data` 包裹两种方式，设计合理。额外发现 6 种未在代码中定义的数据类型（stateOfMind/medications/symptoms/cycleTracking/ecg/heartRateNotifications），可 Phase 2 按需扩展。     |
+| 4   | 睡眠阶段字段名          | ⚠️ 待真机验证 | 文档描述了睡眠的阶段分类，但未列出具体 `value` 字段值。当前代码假设的 `"inBed"` / `"asleepREM"` / `"asleepDeep"` / `"asleepCore"` 需要在首次真机同步后通过 `GET /api/v1/health/raw?metric_type=sleep_analysis` 验证。                                                                   |
+| 5   | 多用户场景            | ✅ 已确认    | 单人使用。`target` 参数保留但默认 `None`，不影响当前功能。                                                                                                                                                                                                      |
+| 6   | ngrok 替代方案偏好     | ✅ 已确认    | Phase 1 使用 ngrok 免费版快速落地（1GB 流量足够），URL 随机问题通过 `start_pipeline.sh` 自动获取解决。后续可迁移到 Cloudflare Tunnel。详细对比见 `docs/ngrok-vs-cloudflare-tunnel.md`。                                                                                              |
 
-### C.2 无法访问的参考 URL
+### C.2 参考 URL（已获取 ✅）
 
-以下两个 URL 因网络安全策略阻止访问，需要用户以本地文件形式提供内容：
+以下两个 URL 的内容已存放于 `Medical-Health-Agent/docs/` 目录：
 
-1. **REST API 自动化**：`https://help.healthyapps.dev/zh-hans/health-auto-export/automations/rest-api/`
-   - 期望获取：URL 配置方式、HTTP Method、Headers 格式、API 响应处理、错误重试机制
-2. **导出格式**：`https://help.healthyapps.dev/zh-hans/health-auto-export/export-format/`
-   - 期望获取：全部 150+ 指标的 `name` 字段映射、units 格式、JSON 结构规范、日期格式说明
+1. ✅ **REST API 自动化** → `docs/将 Apple Health 数据同步到 REST API _ HealthyApps Help Center.html`
+   - 已确认信息：POST 请求、JSON/CSV 格式、自定义 Headers、自动添加 header（`automation-name`/`automation-id`/`automation-aggregation`/`automation-period`/`session-id`）、日期范围选项、批量请求支持、iOS 后台限制
+2. ✅ **导出格式** → `docs/JSON 导出格式 _ HealthyApps Help Center.html`
+   - 已确认信息：8 种数据类型（metrics/workouts/stateOfMind/medications/symptoms/cycleTracking/ecg/heartRateNotifications）、日期格式 `yyyy-MM-dd HH:mm:ss Z`、V1/V2 导出版本、文件结构
 
-> 建议：将这两个网页另存为 HTML 或截图，放到 `Medical-Health-Agent/docs/` 目录下，我可以读取后进一步修正文档和代码。
+**从文档中提取的关键补充信息**：
+
+| 发现 | 对代码的影响 | 处理 |
+|------|------------|------|
+| JSON 包含 8 种数据类型，非仅 metrics + workouts | `HealthExportPayload` 缺少 stateOfMind/medications 等 6 种类型 | Phase 2 按需扩展，当前不影响 |
+| App 自动添加 `automation-name`、`automation-id`、`session-id` 等 header | 可用于日志追踪 | 可选在 `_log_sync` 中记录 |
+| 日期格式确认为 `yyyy-MM-dd HH:mm:ss Z` | 与现有 `_parse_datetime` 逻辑一致 | 无需修改 |
+| iOS 锁定时无法访问 HealthKit | 可能导致某些时段数据缺失 | 设计上已接受 |
+| App 支持"今天"/"昨天"/"过去7天"等多种日期范围 | 首次同步可选择"自上次同步"减少数据量 | 文档中给出配置建议 |
 
 ### C.3 代码中的已知限制
 
-| 限制 | 说明 | 计划 |
-|------|------|------|
-| 睡眠聚合未按阶段分类 | 当前聚合不区分 REM/Deep/Core，仅计算总时长 | Phase 2 按需实现 |
-| 不处理 GPS/路线数据 | workouts 中的 GPS 坐标可能很大，当前丢弃 | 如果分析需要，新增 `gps_points` 表 |
-| 无历史数据回填 | App 首次同步只发「上次同步至今」的增量数据，历史数据需要 App 内选择 Period: All Time | 文档中给出说明 |
-| 无 Webhook 验证签名 | Health Auto Export 不支持 HMAC 签名，仅靠 API Key + HTTPS 保证安全 | 对于个人健康数据足够，如需增强可加 IP 白名单 |
+| 限制             | 说明                                                      | 计划                       |
+| -------------- | ------------------------------------------------------- | ------------------------ |
+| 睡眠聚合未按阶段分类     | 当前聚合不区分 REM/Deep/Core，仅计算总时长                            | Phase 2 按需实现             |
+| 不处理 GPS/路线数据   | workouts 中的 GPS 坐标可能很大，当前丢弃                             | 如果分析需要，新增 `gps_points` 表 |
+| 无历史数据回填        | App 首次同步只发「上次同步至今」的增量数据，历史数据需要 App 内选择 Period: All Time | 文档中给出说明                  |
+| 无 Webhook 验证签名 | Health Auto Export 不支持 HMAC 签名，仅靠 API Key + HTTPS 保证安全  | 对于个人健康数据足够，如需增强可加 IP 白名单 |
 
 ---
 
-> **下一步 Phase 2**：LangGraph 构建 `HealthAnalysisGraph`，感知 Agent 读取聚合数据，分析 Agent 调用大模型 API 生成健康报告。详见 `Phase2-医疗RAG知识库构建方案.md`。
+## 附录 D：实测 JSON 格式校正（基于官方文档）
+
+> **来源**：`docs/健康指标 - JSON 导出格式 _ HealthyApps Help Center.html`、`docs/训练 - JSON 导出格式 _ HealthyApps Help Center.html`
+>
+> 以下校正基于官方文档的准确 JSON schema，标注了与当前代码的差异。
+
+### D.1 健康指标 JSON 数据点字段总结
+
+文档揭示了**三种截然不同的数据点结构**：
+
+#### 类型 1：简单数据点 `{ qty, date }` — 大多数指标
+
+```json
+{ "date": "2024-02-06 14:30:00 -0800", "qty": 8500 }
+```
+适用：`step_count`, `active_energy`, `respiratory_rate`, `body_temperature`, `blood_oxygen_saturation`, `weight_&_body_mass`, `body_mass_index`, `height`, `dietary_water`, `mindful_minutes` 等
+
+#### 类型 2：多字段数值数据点 — 心率、血压、睡眠
+
+**心率（⚠️ 字段名首字母大写）**：
+```json
+{
+  "date": "2024-02-06 14:30:00 -0800",
+  "Min": 65, "Avg": 72, "Max": 85
+}
+```
+> ⚠️ 与当前代码差异：文档使用 `Min`/`Avg`/`Max`（首字母大写），当前 Pydantic 模型使用 `min`/`avg`/`max`（全小写）。需要在 `MetricDataPoint` 中添加**字段别名**（`field_validator` 或 `Field(alias=...)`）兼容两种格式。
+
+**血压**：
+```json
+{
+  "date": "2024-02-06 14:30:00 -0800",
+  "systolic": 120, "diastolic": 80
+}
+```
+
+**睡眠分析 — 聚合模式**（按天汇总）：
+```json
+{
+  "date": "2024-02-06",
+  "totalSleep": 7.5, "asleep": 7.0, "core": 3.5, "deep": 1.5, "rem": 2.0,
+  "sleepStart": "2024-02-05 23:00:00 -0800", "sleepEnd": "2024-02-06 06:30:00 -0800",
+  "inBed": 8.0, "inBedStart": "2024-02-05 22:45:00 -0800", "inBedEnd": "2024-02-06 06:45:00 -0800"
+}
+```
+
+**睡眠分析 — 非聚合模式**（独立睡眠阶段）：
+```json
+{
+  "startDate": "2024-02-05 23:00:00 -0800", "endDate": "2024-02-05 23:30:00 -0800",
+  "qty": 0.5, "value": "Core",
+  "deep": 0.0, "rem": 0.0,
+  "sleepStart": "2024-02-05 23:00:00 -0800", "sleepEnd": "2024-02-06 06:30:00 -0800",
+  "inBed": 8.0, "inBedStart": "2024-02-05 22:45:00 -0800", "inBedEnd": "2024-02-06 06:45:00 -0800"
+}
+```
+> ⚠️ 睡眠阶段 `value` 枚举值（官方）：
+> `"Core"`, `"REM"`, `"Deep"`, `"Awake"`, `"In Bed"`, `"Asleep"`, `"Unspecified"`
+>
+> ⚠️ 与当前代码差异：代码中假设的是 `"inBed"`, `"asleepREM"`, `"asleepDeep"`, `"asleepCore"`, `"awake"`（全小写 CamelCase），官方文档使用**首字母大写**的独立词。需要更新 `config.py` 的 `SLEEP_STAGES`。
+
+#### 类型 3：分类/标记数据点 — 血糖、洗手、刷牙等
+
+**血糖**：
+```json
+{ "date": "2024-02-06 08:00:00 -0800", "qty": 95, "mealTime": "Before Meal" }
+```
+`mealTime` 枚举：`"Before Meal"`, `"After Meal"`, `"Unspecified"`
+
+**洗手**：
+```json
+{ "date": "2024-02-06 12:00:00 -0800", "qty": 1, "value": "Complete" }
+```
+`value`：`"Complete"` / `"Incomplete"`
+
+**刷牙**：同上结构，`value`: `"Complete"` / `"Incomplete"`
+
+**胰岛素给药**：
+```json
+{ "date": "2024-02-06 08:00:00 -0800", "qty": 5, "reason": "Bolus" }
+```
+`reason`：`"Bolus"`（餐时）/ `"Basal"`（基础）
+
+### D.2 训练 (Workouts) V2 JSON 格式
+
+官方 V2 格式比当前代码模型**复杂得多**（当前 `WorkoutData` 仅覆盖了约 20% 的字段）：
+
+**必需字段**：
+```json
+{
+  "id": "550e8400-...",
+  "name": "Running",
+  "start": "2024-02-06 07:00:00 -0800",
+  "end": "2024-02-06 07:30:00 -0800",
+  "duration": 1800
+}
+```
+
+**关键可选字段**（部分）：
+- `activeEnergyBurned`, `totalEnergy`: `{ "qty": 350, "units": "kcal" }`
+- `distance`, `speed`, `avgSpeed`, `maxSpeed`: `{ "qty": N, "units": "mi"/"km"/... }`
+- `heartRate`: `{ "min": { "qty": 120, "units": "bpm" }, "avg": {...}, "max": {...} }`
+- `heartRateData`: `[{ "date": "...", "Min": 120, "Avg": 150, "Max": 175, "units": "bpm", "source": "..." }]`
+- `route`: `[{ "latitude": 37.77, "longitude": -122.41, "altitude": 50.5, "timestamp": "..." }]`
+- `stepCount`, `activeEnergy`, `cyclingCadence` 等时间序列数组
+
+> ⚠️ 当前 `WorkoutData` 需要**完全重写**以匹配 V2 格式。Phase 1 暂时将训练数据以简化格式存入 `raw_health_samples` 表的 `extra` JSON 列，格式不匹配不影响核心功能。完整支持推迟到 Phase 2。
+
+### D.3 指标名称映射校正
+
+| 当前代码中的名称 | 官方文档 snake_case | 状态 |
+|----------------|-------------------|------|
+| `oxygen_saturation` | `blood_oxygen_saturation` | ⚠️ 需校正 |
+| `wrist_temperature` | `Apple_sleep_wrist_temperature`（推测） | ⚠️ 待真机确认 |
+| `heart_rate` | `heart_rate` | ✅ 一致 |
+| `step_count` | `step_count` | ✅ 一致 |
+| `active_energy` | `active_energy` | ✅ 一致 |
+| `resting_heart_rate` | `resting_heart_rate` | ✅ 一致 |
+| `heart_rate_variability` | （文档有提及 HRV） | ✅ 一致 |
+
+### D.4 需要修改的代码文件
+
+| 优先级 | 文件 | 修改内容 |
+|--------|------|---------|
+| **P0** | `models.py` `MetricDataPoint` | `min`/`avg`/`max` → 添加 `Min`/`Avg`/`Max` 别名；添加 `systolic`/`diastolic`/`mealTime`/`reason` 字段 |
+| **P0** | `config.py` `SLEEP_STAGES` | 更新为 `["In Bed", "Asleep", "Awake", "Core", "REM", "Deep", "Unspecified"]` |
+| **P1** | `config.py` `AGGREGATION_METRICS` | `oxygen_saturation` → `blood_oxygen_saturation` |
+| **P1** | `aggregator.py` `_extract_value` | 睡眠阶段值字符串匹配更新 |
+| **P2** | `models.py` `WorkoutData` | 完全重写以匹配 V2 格式 |
+| **P2** | `webhook_server.py` `_insert_workout` | 适配新 WorkoutData |
+
+> **建议**：P0 项在首次连接真机前修复，避免 400 Bad Request。其余可 Phase 2 迭代。
+
+---

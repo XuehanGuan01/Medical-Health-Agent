@@ -7,14 +7,14 @@
 
 ## 零、版本变更
 
-| 变更点 | v2.2 | v2.3 | 理由 |
-|--------|------|------|------|
-| 前端框架 | React Native Expo | **uni-app (Vue 3)** | 首选微信小程序，Vue 上手简单，一套代码多端发布 |
-| 前端语言 | TypeScript (React) | **Vue 3 + JS/TS** | Vue SFC 单文件组件，学习曲线更低 |
-| 目标平台 | iOS + Android App | **微信小程序→多端小程序→H5→App** | 小程序分发零摩擦，用户无需下载安装 |
-| Phase 0 | 仅目录创建 | **完整项目搭建 + LLM 连通性测试** | 基础设施先行，保证后续阶段不卡环境问题 |
-| LLM 配置 | langchain-qwen 专用库 | **langchain-openai (OpenAI兼容)** | 所有 provider 统一接口，一键切换 |
-| Embedding | DashScope API (入库) | **Phase2 已完成 (ChromaDB)** | RAG 知识库已构建完毕 |
+| 变更点       | v2.2               | v2.3                            | 理由                        |
+| --------- | ------------------ | ------------------------------- | ------------------------- |
+| 前端框架      | React Native Expo  | **uni-app (Vue 3)**             | 首选微信小程序，Vue 上手简单，一套代码多端发布 |
+| 前端语言      | TypeScript (React) | **Vue 3 + JS/TS**               | Vue SFC 单文件组件，学习曲线更低      |
+| 目标平台      | iOS + Android App  | **微信小程序→多端小程序→H5→App**          | 小程序分发零摩擦，用户无需下载安装         |
+| Phase 0   | 仅目录创建              | **完整项目搭建 + LLM 连通性测试**          | 基础设施先行，保证后续阶段不卡环境问题       |
+| LLM 配置    | langchain-qwen 专用库 | **langchain-openai (OpenAI兼容)** | 所有 provider 统一接口，一键切换     |
+| Embedding | DashScope API (入库) | **Phase2 已完成 (ChromaDB)**       | RAG 知识库已构建完毕              |
 
 ---
 
@@ -22,22 +22,22 @@
 
 ### 1.1 对比总表
 
-| 维度 | uni-app (Vue 3) | React Native (Expo) |
-|------|-----------------|---------------------|
-| **语言** | Vue 3 (JS/TS) | React (JSX/TSX) |
-| **学习曲线** | ⭐ 低 — Vue 模板语法接近原生 HTML | ⭐⭐⭐ 中 — 需理解 React 生态 (Hooks/JSX/状态管理) |
-| **目标平台** | 微信/支付宝/百度/字节等 8+ 小程序 + H5 + App | iOS + Android App |
-| **小程序支持** | ✅ **核心能力**，条件编译精准适配 | ❌ 不支持 |
-| **App 性能** | ⭐⭐⭐ (nvue/uni-app x 可接近原生) | ⭐⭐⭐⭐ (Bridge → JSI/Fabric 架构) |
-| **H5 支持** | ✅ 一套代码出 H5 | ❌ 需单独用 React DOM |
-| **热更新** | ✅ HBuilderX / CLI + 小程序热重载 | ✅ Expo Go / OTA updates |
-| **UI 组件** | uni-ui (官方) + uView + 微信原生组件 | react-native-gifted-chat + NativeBase |
-| **生态成熟度** | ⭐⭐⭐⭐⭐ 国内极度成熟，中文文档完善 | ⭐⭐⭐⭐ 国际成熟，英文为主 |
-| **包体积** | 小程序 < 2MB (分包) / App ~15MB | App ~15-20MB |
-| **调试体验** | HBuilderX 集成 + 微信开发者工具 | VS Code + Expo Go + Flipper |
-| **Chat UI** | 可复用微信聊天界面风格 | react-native-gifted-chat (成熟) |
-| **部署分发** | 小程序审核发布 + H5 直接部署 | App Store + Google Play 审核 |
-| **本项目适配度** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ |
+| 维度          | uni-app (Vue 3)                 | React Native (Expo)                   |
+| ----------- | ------------------------------- | ------------------------------------- |
+| **语言**      | Vue 3 (JS/TS)                   | React (JSX/TSX)                       |
+| **学习曲线**    | ⭐ 低 — Vue 模板语法接近原生 HTML         | ⭐⭐⭐ 中 — 需理解 React 生态 (Hooks/JSX/状态管理) |
+| **目标平台**    | 微信/支付宝/百度/字节等 8+ 小程序 + H5 + App | iOS + Android App                     |
+| **小程序支持**   | ✅ **核心能力**，条件编译精准适配             | ❌ 不支持                                 |
+| **App 性能**  | ⭐⭐⭐ (nvue/uni-app x 可接近原生)      | ⭐⭐⭐⭐ (Bridge → JSI/Fabric 架构)         |
+| **H5 支持**   | ✅ 一套代码出 H5                      | ❌ 需单独用 React DOM                      |
+| **热更新**     | ✅ HBuilderX / CLI + 小程序热重载      | ✅ Expo Go / OTA updates               |
+| **UI 组件**   | uni-ui (官方) + uView + 微信原生组件    | react-native-gifted-chat + NativeBase |
+| **生态成熟度**   | ⭐⭐⭐⭐⭐ 国内极度成熟，中文文档完善             | ⭐⭐⭐⭐ 国际成熟，英文为主                        |
+| **包体积**     | 小程序 < 2MB (分包) / App ~15MB      | App ~15-20MB                          |
+| **调试体验**    | HBuilderX 集成 + 微信开发者工具          | VS Code + Expo Go + Flipper           |
+| **Chat UI** | 可复用微信聊天界面风格                     | react-native-gifted-chat (成熟)         |
+| **部署分发**    | 小程序审核发布 + H5 直接部署               | App Store + Google Play 审核            |
+| **本项目适配度**  | ⭐⭐⭐⭐⭐                           | ⭐⭐⭐                                   |
 
 ### 1.2 适用场景分析
 

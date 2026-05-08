@@ -25,7 +25,7 @@ logger = logging.getLogger("llm")
 # ============================================================
 # 切换开关 — 改这里一键切换 provider
 # ============================================================
-CURRENT_PROVIDER = "qwen"  # "qwen" | "deepseek" | "openai"
+CURRENT_PROVIDER = "qwen"  # "qwen" | "deepseek"
 
 # ============================================================
 # Provider 配置表 — 新增 provider 在这里加一行
@@ -54,12 +54,6 @@ PROVIDER_CONFIGS = {
         "base_url": "https://api.deepseek.com/v1",
         "env_key": "DEEPSEEK_API_KEY",
         "desc": "DeepSeek V4 Pro (deepseek-reasoner)",
-    },
-    "openai": {
-        "model_name": "gpt-4o",
-        "base_url": "https://api.openai.com/v1",
-        "env_key": "OPENAI_API_KEY",
-        "desc": "OpenAI (GPT-4o)",
     },
 }
 
@@ -146,12 +140,14 @@ def test_one_provider(provider: str, timeout: float = 15.0) -> dict:
     """
     测试单个 provider 是否连通。
 
-    返回: {"ok": bool, "latency_ms": float, "response": str, "error": str}
+    返回: {"ok": bool, "model_name": str, "model_desc": str,
+           "latency_ms": float, "response": str, "error": str}
     """
     try:
         cfg = _get_provider_config(provider)
     except RuntimeError as e:
-        return {"ok": False, "latency_ms": 0, "response": "", "error": str(e)}
+        return {"ok": False, "model_name": "", "model_desc": "",
+                "latency_ms": 0, "response": "", "error": str(e)}
 
     llm = ChatOpenAI(
         model=cfg["model_name"],
@@ -169,6 +165,8 @@ def test_one_provider(provider: str, timeout: float = 15.0) -> dict:
         content = resp.content.strip() if hasattr(resp, "content") else str(resp)
         return {
             "ok": True,
+            "model_name": cfg["model_name"],
+            "model_desc": cfg["desc"],
             "latency_ms": round(elapsed, 1),
             "response": content[:100],
             "error": "",
@@ -177,6 +175,8 @@ def test_one_provider(provider: str, timeout: float = 15.0) -> dict:
         elapsed = (time.perf_counter() - t0) * 1000
         return {
             "ok": False,
+            "model_name": cfg["model_name"],
+            "model_desc": cfg["desc"],
             "latency_ms": round(elapsed, 1),
             "response": "",
             "error": f"{type(e).__name__}: {e}",
@@ -202,6 +202,7 @@ def test_all_providers(providers: Optional[list[str]] = None) -> dict:
         result = test_one_provider(name)
         results[name] = result
         if result["ok"]:
+            print(f"  🟢 型号: {result['model_name']} | {result['model_desc']}")
             print(f"  ✅ 连通成功! 延迟 {result['latency_ms']:.0f}ms")
             print(f"  响应: {result['response']}")
         else:
@@ -214,6 +215,7 @@ def test_current_provider():
     print(f"当前 Provider: {CURRENT_PROVIDER} ({PROVIDER_CONFIGS[CURRENT_PROVIDER]['desc']})")
     result = test_one_provider(CURRENT_PROVIDER)
     if result["ok"]:
+        print(f"🟢 型号: {result['model_name']} | {result['model_desc']}")
         print(f"✅ 连通成功! 延迟 {result['latency_ms']:.0f}ms")
         print(f"   响应: {result['response']}")
     else:
@@ -236,6 +238,7 @@ if __name__ == "__main__":
             sys.exit(1)
         result = test_one_provider(provider)
         if result["ok"]:
+            print(f"🟢 型号: {result['model_name']} | {result['model_desc']}")
             print(f"✅ {provider} 连通! 延迟 {result['latency_ms']:.0f}ms")
             print(f"   {result['response']}")
         else:
