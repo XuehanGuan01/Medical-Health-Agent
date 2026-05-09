@@ -2423,3 +2423,43 @@ summary = {
 > **建议**：P0 项在首次连接真机前修复，避免 400 Bad Request。其余可 Phase 2 迭代。
 
 ---
+## 代码升级
+
+Phase 1 代码升级完成
+
+  文件: config.py
+  P0 修复: —
+  P1 改进: 新增
+    SLEEP_STAGES（官方首字母大写枚举）、HOST/PORT；oxygen_saturation→blood_oxygen_satu
+  ration；新增
+     exercise_time、wrist_temperature 聚合指标
+  ────────────────────────────────────────
+  文件: models.py
+  P0 修复: normalize_date 实际执行 ISO 8601 转换；Min/Avg/Max
+
+  字段别名（populate_by_name=True）兼容大小写；新增血压/血糖/睡眠聚合字段；SQLAlchemy
+     移除 default=datetime.utcnow（已弃用）
+  P1 改进: WorkoutData 新增 id/start/end/location 等 V2 字段；MetricDataPoint 新增 10+
+
+    睡眠聚合字段
+  ────────────────────────────────────────
+  文件: database.py
+  P0 修复: —
+  P1 改进: 用 Path 替代字符串切割；autoflush=False, autocommit=False
+  ────────────────────────────────────────
+  文件: aggregator.py
+  P0 修复: compute_baseline 返回 upper_bound/lower_bound（非
+    upper/lower）；timezone.utc 感知
+  P1 改进: 数值 round(..., 2)；stddev 单样本时返回 0.0；exc_info=True 日志
+  ────────────────────────────────────────
+  文件: webhook_server.py
+  P0 修复: 5 处 datetime.utcnow()→datetime.now(timezone.utc)；新增 GET
+    /api/v1/health/baseline 端点（Phase 3 前置）
+  P1 改进: 日志记录 automation-name/session-id header；status API 返回空值比例+Top20
+    限制；raw 查询返回 end_time+extra；sync 响应含 aggregation_errors
+  ────────────────────────────────────────
+  文件: test_data.py
+  P0 修复: datetime.utcnow()→datetime.now(timezone.utc)；睡眠阶段改为官方标签（"In
+    Bed"/"Core"/"Deep"/"REM"/"Awake"）；心率用 Min/Avg/Max 大写格式
+  P1 改进: 覆盖 Tier 1 全部 10 种指标；workout 用 V2 格式（含
+    id/start/end/location）；days_back 边界保护

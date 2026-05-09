@@ -28,16 +28,16 @@
 
 ### 2.2 核心能力清单
 
-| # | 能力 | 对应 Phase | 状态 |
-|---|------|-----------|------|
-| 1 | Apple Health 数据自动同步 + 聚合 | Phase 1 | ⚠️ 代码完成，待iOS联调 |
-| 2 | 华佗医疗知识 RAG 检索 | Phase 2 | ✅ 已完成 |
-| 3 | 意图路由 + Self-RAG 医疗问答 | Phase 3 | ❌ 当前卡点 |
-| 4 | 健康数据分析（感知Agent） | Phase 3 | ❌ |
-| 5 | 硬边界拒答（安全机制） | Phase 3 | ❌ |
-| 6 | 对话历史 + 周报 + 趋势追踪 | Phase 4 | ❌ |
-| 7 | 微信小程序前端（对话/看板/周报） | Phase 5 | ❌ |
-| 8 | 多Provider LLM一键切换 | Phase 0 | ✅ |
+| #   | 能力                       | 对应 Phase | 状态     |
+| --- | ------------------------ | -------- | ------ |
+| 1   | Apple Health 数据自动同步 + 聚合 | Phase 1  | ✅ 已完成  |
+| 2   | 华佗医疗知识 RAG 检索            | Phase 2  | ✅ 已完成  |
+| 3   | 意图路由 + Self-RAG 医疗问答     | Phase 3  | ❌ 当前卡点 |
+| 4   | 健康数据分析（感知Agent）          | Phase 3  | ❌      |
+| 5   | 硬边界拒答（安全机制）              | Phase 3  | ❌      |
+| 6   | 对话历史 + 周报 + 趋势追踪         | Phase 4  | ❌      |
+| 7   | 微信小程序前端（对话/看板/周报）        | Phase 5  | ❌      |
+| 8   | 多Provider LLM一键切换        | Phase 0  | ✅      |
 
 ### 2.3 模块划分
 
@@ -59,7 +59,7 @@
 │  ┌───────────────────────┐     ┌──────────────────────────┐      │
 │  │  Phase 2: RAG 知识库   │     │  Phase 1: 健康数据管道     │      │
 │  │  ChromaDB (本地)       │     │  SQLite + 日聚合 + 基线    │      │
-│  │  huatuo 27.6万条 ✅    │     │  data_pipeline/ ⚠️        │      │
+│  │  huatuo 27.6万条 ✅    │     │  data_pipeline/ ✅        │      │
 │  └───────────────────────┘     └──────────────────────────┘      │
 └──────────────────────────────────────────────────────────────────┘
                                  │ HTTP
@@ -81,7 +81,7 @@
 | 目录 | Phase | 职责 | 核心接口 |
 |------|-------|------|---------|
 | `config/` | 0 ✅ | LLM配置中心，多provider一键切换 | `get_llm(role)` → ChatOpenAI实例 |
-| `data_pipeline/` | 1 ⚠️ | Apple Health数据接收+聚合+基线 | `GET /api/v1/health/*` |
+| `data_pipeline/` | 1 ✅ | Apple Health数据接收+聚合+基线 | `GET /api/v1/health/*`（5个端点） |
 | `rag/` | 2 ✅ | 医疗知识检索 | `MedicalRetriever.search(query, k)` |
 | `agents/` | 3 ❌ | LangGraph Agent调度 | `graph.invoke(AgentState)` |
 | `memory/` | 4 ❌ | 对话记忆+周报+趋势 | [待开发] |
@@ -122,44 +122,44 @@
 | **状态** | ✅ 已完成。`python -m config.llm` 可验证连通性 |
 | **预估工期** | Day 1（已完成） |
 
-### Phase 1 — 数据管道 ⚠️ 代码完成，待部署联调
+### Phase 1 — 数据管道 ✅ 已完成
 
 | 维度 | 内容 |
 |------|------|
 | **目标** | iPhone Apple Health → ngrok → FastAPI → SQLite → 日聚合 + 30天基线 |
-| **任务清单** | ①FastAPI Webhook接收端 ✅ ②Pydantic校验+SQLAlchemy持久化 ✅ ③日聚合+基线计算 ✅ ④**ngrok部署，获取公网URL** ❌ ⑤**iPhone配置Health Auto Export + 端到端验证** ❌ |
+| **任务清单** | ①FastAPI Webhook接收端 ✅ ②Pydantic校验+SQLAlchemy持久化 ✅ ③日聚合+基线计算 ✅ ④ngrok部署 ✅ ⑤iPhone + 真机数据端到端验证 ✅ |
+| **数据规模** | 一年 Apple Health 历史数据入库，含心率/步数/HRV/呼吸/步行/能量等 20+ 类指标 |
 | **输入** | Phase 0 |
-| **输出** | `data_pipeline/`下6个`.py`文件；4个API端点(`/sync`, `/daily`, `/raw`, `/status`) |
-| **状态** | ⚠️ 代码已完成但存在以下问题： |
-| **预估工期** | 已投入1-2周（代码），剩余2-4小时（ngrok+iOS联调） |
+| **输出** | `data_pipeline/`下6个`.py`文件（已升级至v2）；5个API端点(`/sync`, `/daily`, `/raw`, `/baseline`, `/status`)；测试手册`docs/Phase1-测试手册.md` |
+| **状态** | ✅ 已完成。2026-05-09 一年真实数据入库并通过端到端验证 |
+| **预估工期** | 已投入1-2周 |
 
-#### Phase 1 代码现状（基于实际代码验证）
+#### Phase 1 代码升级完成（v1 → v2）
 
-当前代码为 **v1版本**（`Phase1v2-Apple-Health数据管道实施方案.md` 中描述的大量v2改进**并未应用到代码中**）：
-
-| 差异点 | 当前代码(v1) | Phase1v2文档要求 | 影响 |
-|--------|------------|-----------------|------|
-| `datetime.utcnow()` | 使用（已弃用） | `datetime.now(timezone.utc)` | Python 3.12+警告 |
-| `normalize_date` | 空转，直接`return v` | 实际执行ISO 8601格式转换 | iOS日期格式兼容性风险 |
-| `/api/v1/health/baseline` | **不存在** | 应提供基线查询端点 | **Phase 3感知Agent缺少数据源** |
-| `compute_baseline`返回值 | `upper`/`lower` | `upper_bound`/`lower_bound` | API响应字段名不一致 |
-| 心率字段`Min`/`Avg`/`Max` | 不支持 | 应添加别名兼容 | 真机数据可能400 Bad Request |
-| 血氧字段名 | `oxygen_saturation` | 官方文档为`blood_oxygen_saturation` | 真机数据可能无法匹配 |
-| 睡眠阶段枚举 | 无 | 应使用`"Core"`, `"REM"`, `"Deep"`等 | 睡眠数据解析可能出错 |
-
-> **结论**：Phase 1代码在连接真机前需要升级到v2版本。但这**不阻塞Phase 3启动**——Phase 3初期可完全使用模拟数据。
+| 变更 | 说明 |
+|------|------|
+| `datetime.utcnow()` → `datetime.now(timezone.utc)` | Python 3.12+ 兼容 |
+| `normalize_date` 实际执行 ISO 8601 转换 | iOS 日期格式兼容 |
+| 新增 `GET /api/v1/health/baseline` 端点 | Phase 3 感知Agent直接调用 |
+| `compute_baseline` 返回 `upper_bound`/`lower_bound` | API 字段名规范化 |
+| 心率字段 `Min`/`Avg`/`Max` 别名 | Pydantic `populate_by_name=True`，兼容官方大写格式 |
+| `SLEEP_STAGES` 枚举对齐官方文档 | `"Core"`, `"REM"`, `"Deep"` 等 |
+| `AGGREGATION_METRICS` 对齐真机数据 | `apple_exercise_time`, `basal_energy_burned` 等 16 个指标 |
+| `on_event("startup")` → lifespan | FastAPI 新 API，消除 DeprecationWarning |
 
 #### Phase 1 → Phase 3 接口契约
 
-Phase 3 的 Perception Agent 需要以下数据（当前可用状态）：
+Phase 3 的 Perception Agent 可直接使用以下已就绪的接口：
 
-| 数据需求 | 获取方式 | 当前可用？ |
-|---------|---------|-----------|
-| 今日日聚合指标 | `GET /api/v1/health/daily?date=today` | ✅ 代码已有（用模拟数据验证过） |
-| 30天基线 | `data_pipeline.aggregator.compute_baseline(db, metric_type, days=30)` | ✅ 函数可用，但无REST端点 |
-| 原始数据查询 | `GET /api/v1/health/raw?metric_type=X&date_from=Y` | ✅ 代码已有 |
+| 数据需求 | 获取方式 | 可用状态 |
+|---------|---------|---------|
+| 今日日聚合 | `GET /api/v1/health/daily?date=today` | ✅ 可用 |
+| 30天基线 | `GET /api/v1/health/baseline?metric_type=heart_rate&days=30` | ✅ 可用 |
+| 原始数据点 | `GET /api/v1/health/raw?metric_type=X&date_from=Y` | ✅ 可用 |
+| 数据库概览 | `GET /api/v1/health/status` | ✅ 可用 |
+| Python 函数调用 | `aggregator.compute_baseline(db, metric, days)` | ✅ 可用 |
 
-**Phase 3 启动策略**：直接调用 `data_pipeline` 的Python函数，不依赖REST API。初期使用 `test_data.py` 生成的模拟数据即可开发和验证Agent逻辑。真实数据通路可在Phase 3开发期间并行打通。
+**Phase 3 启动策略**：Phase 1 已有真实数据，Perception Agent 直接消费上述 REST 端点或 Python 函数，无需再依赖模拟数据。
 
 ### Phase 2 — RAG 知识库 ✅ 已完成
 
@@ -190,13 +190,13 @@ context = retriever.format_context(docs)          # → str (可直接喂给LLM)
 
 ### Phase 3 — Agent 系统 ⭐ 核心（当前卡点）
 
-| 维度 | 内容 |
-|------|------|
-| **目标** | 用LangGraph StateGraph构建完整Agent调度："意图路由→Self-RAG→回答生成"闭环 |
-| **输入** | Phase 0：`config/llm.py` LLM实例；Phase 2：`rag/retriever.py`检索接口；Phase 1：`data_pipeline/aggregator.py`（可选，初期用模拟数据） |
-| **输出** | `agents/`下8个`.py`文件 + `prompts/`下Prompt模板 + FastAPI `/api/v1/chat`端点 |
-| **状态** | ❌ 未开始。`agents/`和`prompts/`仅有空`__init__.py` |
-| **预估工期** | 2-3周 |
+| 维度       | 内容                                                                                                             |
+| -------- | -------------------------------------------------------------------------------------------------------------- |
+| **目标**   | 用LangGraph StateGraph构建完整Agent调度："意图路由→Self-RAG→回答生成"闭环                                                        |
+| **输入**   | Phase 0：`config/llm.py` LLM实例；Phase 2：`rag/retriever.py`检索接口；Phase 1：`data_pipeline/`真实健康数据（✅已就绪） |
+| **输出**   | `agents/`下8个`.py`文件 + `prompts/`下Prompt模板 + FastAPI `/api/v1/chat`端点                                           |
+| **状态**   | ❌ 未开始。`agents/`和`prompts/`仅有空`__init__.py`                                                                     |
+| **预估工期** | 2-3周                                                                                                           |
 
 #### 开发顺序（文件级，严格按依赖排列）
 
@@ -211,10 +211,11 @@ Step 7: agents/action.py        — 对话/建议生成
 Step 8: agents/graph.py         — StateGraph编译 + FastAPI chat端点
 ```
 
-**Phase 3 不依赖Phase 1真实数据的启动策略**：
-- Perception Agent初期使用硬编码的模拟健康数据
-- 真实数据通路在Phase 1 ngrok部署完成后替换
-- 其余Agent节点（Router/Analysis/Action）完全不依赖Phase 1
+**Phase 3 数据依赖现状**：
+- Phase 1 真实数据已就绪（一年历史 + 日聚合 + 基线），Perception Agent 可直接消费
+- Phase 2 RAG 检索接口已就绪（27.6万条医疗QA）
+- Perception Agent 可直接调 `compute_baseline()` 或 `/api/v1/health/baseline` 获取 30 天基线
+- 其余 Agent 节点（Router/Analysis/Action）完全不依赖 Phase 1
 
 详见 **第五章 Phase 3 详细设计**。
 
@@ -610,16 +611,16 @@ Week 8-10          Phase 6: 集成测试 + 质量评估 + 小程序审核提交
 
 ### 附录 C：v3 相对于 v2.3 的版本变更
 
-| 变更点 | v2.3 | v3 | 理由 |
-|--------|------|-----|------|
-| 文档定位 | 方案描述 | **可执行方案 + 接口契约** | 解决"文档不能指导执行"的问题 |
-| Phase 1 状态 | "代码已完成" | ⚠️ 代码为v1，需升级到v2 + 部署ngrok | 基于实际代码验证 |
-| Phase 1→3 接口 | 未定义 | 明确定义Python函数调用接口 | 解除Phase 3启动阻塞 |
-| Phase 3 启动策略 | Phase 1/2 完成后启动 | **可立即启动**（用模拟健康数据） | 不等待iOS联调 |
-| Phase 3 设计 | 概略描述 | 完整AgentState + Graph拓扑 + 节点设计 + 接口调用方式 | 可直接编码 |
-| 本地模型 | 未提及 | 明确记录放弃原因（训练成本） | 决策可追溯 |
-| Embedding方案 | 模糊（文档讨论过两种） | 确认 DashScope text-embedding-v4 | 基于实际代码 |
-| 进度控制 | 无 | 里程碑M0-M4 + 每个Phase验收标准 | 防止不同步 |
+| 变更点          | v2.3            | v3                                     | 理由              |
+| ------------ | --------------- | -------------------------------------- | --------------- |
+| 文档定位         | 方案描述            | **可执行方案 + 接口契约**                       | 解决"文档不能指导执行"的问题 |
+| Phase 1 状态   | "代码已完成"         | ⚠️ 代码为v1，需升级到v2 + 部署ngrok              | 基于实际代码验证        |
+| Phase 1→3 接口 | 未定义             | 明确定义Python函数调用接口                       | 解除Phase 3启动阻塞   |
+| Phase 3 启动策略 | Phase 1/2 完成后启动 | **可立即启动**（用模拟健康数据）                     | 不等待iOS联调        |
+| Phase 3 设计   | 概略描述            | 完整AgentState + Graph拓扑 + 节点设计 + 接口调用方式 | 可直接编码           |
+| 本地模型         | 未提及             | 明确记录放弃原因（训练成本）                         | 决策可追溯           |
+| Embedding方案  | 模糊（文档讨论过两种）     | 确认 DashScope text-embedding-v4         | 基于实际代码          |
+| 进度控制         | 无               | 里程碑M0-M4 + 每个Phase验收标准                 | 防止不同步           |
 
 ---
 
