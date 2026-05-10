@@ -1,5 +1,6 @@
 """
 检索接口 — Phase 3 Agent 调用
+这里的embedding模型选用了初始化ChromaDB数据库时相同的：text-embedding-v4
 
 用法:
     from rag.retriever import MedicalRetriever
@@ -19,7 +20,7 @@ from langchain_community.embeddings import DashScopeEmbeddings
 class MedicalRetriever:
     """华佗医疗 RAG 检索器"""
 
-    def __init__(self, persist_dir: str = "./data/chroma"):
+    def __init__(self, persist_dir: str = "rag/data/chroma"):
         if not os.path.exists(persist_dir):
             raise FileNotFoundError(
                 f"ChromaDB 目录不存在: {persist_dir}\n"

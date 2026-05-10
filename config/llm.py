@@ -25,7 +25,7 @@ logger = logging.getLogger("llm")
 # ============================================================
 # 切换开关 — 改这里一键切换 provider
 # ============================================================
-CURRENT_PROVIDER = "qwen"  # "qwen" | "deepseek"
+CURRENT_PROVIDER = "qwen"  # "qwen" | "deepseek" |  deepseek-pro
 
 # ============================================================
 # Provider 配置表 — 新增 provider 在这里加一行
@@ -133,7 +133,7 @@ def get_perception_llm(provider=None):
 # ============================================================
 # API 连通性测试
 # ============================================================
-TEST_MESSAGE = "你好。请用一句话介绍你自己。（10个字以内）"
+TEST_MESSAGE = "你是什么模型？请具体到型号（max/pro/flash）。你的训练截至日期是什么时候？（20个字以内）"
 
 
 def test_one_provider(provider: str, timeout: float = 15.0) -> dict:

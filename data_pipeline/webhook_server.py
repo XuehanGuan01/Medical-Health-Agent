@@ -468,6 +468,34 @@ def get_status(db: Session = Depends(get_db)):
 
 
 # ============================================================
+# Phase 3: Agent 对话端点
+# ============================================================
+
+from pydantic import BaseModel as PydanticBaseModel
+
+
+class ChatRequest(PydanticBaseModel):
+    query: str
+    session_id: str = None
+
+
+@app.post("/api/v1/chat")
+def chat_endpoint(req: ChatRequest):
+    """
+    Phase 3 对话入口。
+
+    请求:
+      {"query": "小孩发烧39度怎么办？", "session_id": "optional"}
+
+    响应:
+      {"response": "...", "intent": "medical_qa", "route": "analysis",
+       "source": "qwen3-max", "safety_level": "normal", "retry_count": 0}
+    """
+    from agents.graph import chat as agent_chat
+    return agent_chat(query=req.query, session_id=req.session_id)
+
+
+# ============================================================
 # 入口
 # ============================================================
 

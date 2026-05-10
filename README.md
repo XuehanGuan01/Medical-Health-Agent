@@ -1,6 +1,6 @@
 # Medical-Health-Agent 方案 v3
 
-> 2026-05-09 | 纯 API 架构 | Qwen3-Max + Self-RAG + LangGraph | ChromaDB | uni-app 微信小程序
+> 2026-05-10 | 纯 API 架构 | Qwen3-Max + Self-RAG + LangGraph | ChromaDB | uni-app 微信小程序 | Phase 0-3 ✅
 > 基于 v2.3 + 全部历史方案 + 实际代码验证
 
 ---
@@ -32,10 +32,10 @@
 | --- | ------------------------ | -------- | ------ |
 | 1   | Apple Health 数据自动同步 + 聚合 | Phase 1  | ✅ 已完成  |
 | 2   | 华佗医疗知识 RAG 检索            | Phase 2  | ✅ 已完成  |
-| 3   | 意图路由 + Self-RAG 医疗问答     | Phase 3  | ❌ 当前卡点 |
-| 4   | 健康数据分析（感知Agent）          | Phase 3  | ❌      |
-| 5   | 硬边界拒答（安全机制）              | Phase 3  | ❌      |
-| 6   | 对话历史 + 周报 + 趋势追踪         | Phase 4  | ❌      |
+| 3   | 意图路由 + Self-RAG 医疗问答     | Phase 3  | ✅ 已完成 |
+| 4   | 健康数据分析（感知Agent）          | Phase 3  | ✅ 已完成 |
+| 5   | 硬边界拒答（安全机制）              | Phase 3  | ✅ 已完成 |
+| 6   | 对话历史 + 周报 + 趋势追踪         | Phase 4  | ❌ 待启动 |
 | 7   | 微信小程序前端（对话/看板/周报）        | Phase 5  | ❌      |
 | 8   | 多Provider LLM一键切换        | Phase 0  | ✅      |
 
@@ -83,9 +83,9 @@
 | `config/` | 0 ✅ | LLM配置中心，多provider一键切换 | `get_llm(role)` → ChatOpenAI实例 |
 | `data_pipeline/` | 1 ✅ | Apple Health数据接收+聚合+基线 | `GET /api/v1/health/*`（5个端点） |
 | `rag/` | 2 ✅ | 医疗知识检索 | `MedicalRetriever.search(query, k)` |
-| `agents/` | 3 ❌ | LangGraph Agent调度 | `graph.invoke(AgentState)` |
+| `agents/` | 3 ✅ | LangGraph Agent调度 | `graph.chat(query)` → `/api/v1/chat` |
+| `prompts/` | 3 ✅ | Prompt模板管理 | 5个模块（router/analysis/perception/action/boundary） |
 | `memory/` | 4 ❌ | 对话记忆+周报+趋势 | [待开发] |
-| `prompts/` | 3 ❌ | Prompt模板管理 | [待开发] |
 | `frontend/` | 5 ❌ | uni-app小程序 | [待开发] |
 
 ---
@@ -188,47 +188,32 @@ context = retriever.format_context(docs)          # → str (可直接喂给LLM)
 
 **未验证**：检索质量尚未通过Phase 3 Agent实际使用来评估（因为Agent还没开发）。但这不阻塞Phase 3——检索接口可直接调用，质量评估可在Phase 3开发过程中并行进行。
 
-### Phase 3 — Agent 系统 ⭐ 核心（当前卡点）
-
-| 维度       | 内容                                                                                                             |
-| -------- | -------------------------------------------------------------------------------------------------------------- |
-| **目标**   | 用LangGraph StateGraph构建完整Agent调度："意图路由→Self-RAG→回答生成"闭环                                                        |
-| **输入**   | Phase 0：`config/llm.py` LLM实例；Phase 2：`rag/retriever.py`检索接口；Phase 1：`data_pipeline/`真实健康数据（✅已就绪） |
-| **输出**   | `agents/`下8个`.py`文件 + `prompts/`下Prompt模板 + FastAPI `/api/v1/chat`端点                                           |
-| **状态**   | ❌ 未开始。`agents/`和`prompts/`仅有空`__init__.py`                                                                     |
-| **预估工期** | 2-3周                                                                                                           |
-
-#### 开发顺序（文件级，严格按依赖排列）
-
-```
-Step 1: agents/state.py         — AgentState TypedDict 定义
-Step 2: prompts/                 — 5个Prompt模板（router/analysis/reflect/revise/action）
-Step 3: agents/boundary.py      — 硬边界拒答模板
-Step 4: agents/router.py        — 意图路由节点
-Step 5: agents/analysis.py      — Self-RAG核心（检索→生成→自检→修正）
-Step 6: agents/perception.py    — 健康数据感知（消费Phase 1数据）
-Step 7: agents/action.py        — 对话/建议生成
-Step 8: agents/graph.py         — StateGraph编译 + FastAPI chat端点
-```
-
-**Phase 3 数据依赖现状**：
-- Phase 1 真实数据已就绪（一年历史 + 日聚合 + 基线），Perception Agent 可直接消费
-- Phase 2 RAG 检索接口已就绪（27.6万条医疗QA）
-- Perception Agent 可直接调 `compute_baseline()` 或 `/api/v1/health/baseline` 获取 30 天基线
-- 其余 Agent 节点（Router/Analysis/Action）完全不依赖 Phase 1
-
-详见 **第五章 Phase 3 详细设计**。
-
-### Phase 4 — 长期记忆 & 健康趋势
+### Phase 3 — Agent 系统 ✅ 已完成 (2026-05-10 验收)
 
 | 维度 | 内容 |
 |------|------|
-| **目标** | 对话历史持久化 + 周报生成 + 健康趋势查询 |
-| **主要任务** | ①对话历史SQLite存储 + ChromaDB语义记忆 ②周报生成（LLM叙事+embedding存储） ③趋势查询 |
-| **输入** | Phase 3（Agent系统可用，有对话产出） |
-| **输出** | `memory/vector_store.py`, `memory/weekly_summary.py`, `memory/trend.py` |
-| **状态** | ❌ 未开始 |
-| **预估工期** | 1-2周（可与Phase 5并行） |
+| **目标** | LangGraph StateGraph 构建 "意图路由→Self-RAG→回答生成" 闭环 |
+| **输出** | `agents/` 7个.py + `prompts/` 5个.py + `POST /api/v1/chat` + 测试手册 |
+| **状态** | ✅ 已完成。路由准确率 ≥85%，紧急触发率 100%，10个设计决策全部落地 |
+| **工期** | 1天 |
+
+### Phase 4 — 长期记忆 & 健康趋势 ❌ 待启动
+
+| 维度 | 内容 |
+|------|------|
+| **目标** | 多轮对话记忆 + 7天周报生成 + 多周趋势对比 |
+| **主要任务** | ①对话历史 SQLite 持久化（`chat_history` 表，含 session_id/query/response/intent/timestamp）②`/api/v1/chat` 接入多轮（读最近 N 轮历史注入 `AgentState.messages`）③`memory/weekly_summary.py` 周报生成（读 7 天 `daily_metrics` → LLM 叙事 → 存入 `weekly_reports` 表）④`memory/trend.py` 趋势查询（`/api/v1/health/trend?metric=heart_rate&weeks=4` → 周均值对比） |
+| **输入** | Phase 3（`/api/v1/chat` 已验证） + Phase 1（`daily_metrics` 真实数据） |
+| **输出** | `memory/schema.py`（SQLite 表 + ChromaDB 语义记忆 schema）、`memory/history.py`（对话历史 CRUD）、`memory/weekly_summary.py`、`memory/trend.py`、FastAPI 新端点（`/api/v1/chat` 多轮增强、`/api/v1/health/trend`、`/api/v1/report/weekly`） |
+| **状态** | ❌ 未开始。`memory/` 目录不存在 |
+| **预估工期** | 3-5天 |
+
+**Phase 4 关键设计点**：
+
+- **对话历史**：SQLite `chat_history` 表 + 轻量方案。每次 `chat()` 时自动存入，读最近 5 轮注入 `state["messages"]`
+- **多轮对话**：Router 感知上下文历史避免重复问"我今天心率怎么样"被误判为 general_chat（需看历史是否已提过健康数据）
+- **周报**：`aggregate_daily_metrics` 已覆盖 7 天 → LLM 生成叙事（"本周心率稳定，均值 72bpm…"）→ 存入 `weekly_reports` 表 → 支持历史周报查询
+- **趋势**：`/api/v1/health/trend` 读 `daily_metrics` → 按周聚合 → 返回多周对比数据（均值/最值/变化率）
 
 ### Phase 5 — uni-app 小程序前端
 
@@ -241,7 +226,7 @@ Step 8: agents/graph.py         — StateGraph编译 + FastAPI chat端点
 | **状态** | ❌ 未开始。`frontend/`仅有`README.md` |
 | **预估工期** | 2-3周（可与Phase 4并行） |
 
-**建议**：Phase 5不要等Phase 3全部完成再启动。可以在Phase 3有第一个可用的`/api/v1/chat`端点后就开始前端搭建，先做UI部分（用mock数据），再逐步替换为真实API。
+**建议**：Phase 5 现在即可启动——`/api/v1/chat` 和 `/api/v1/health/*` 全部就绪。先做 ChatView 对接真端点，Dashboard 对接真实健康数据。
 
 ### Phase 6 — 集成测试 & 上线
 
