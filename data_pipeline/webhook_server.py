@@ -45,7 +45,10 @@ logger = logging.getLogger("health-webhook")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    logger.info("Database initialized successfully")
+    # Phase 4: 初始化 memory.db
+    from memory.database import init_memory_db
+    init_memory_db()
+    logger.info("Database initialized successfully (health + memory)")
     yield
 
 app = FastAPI(
@@ -468,7 +471,7 @@ def get_status(db: Session = Depends(get_db)):
 
 
 # ============================================================
-# Phase 3: Agent 对话端点
+# Phase 3+4: Agent 对话 & 记忆端点
 # ============================================================
 
 from pydantic import BaseModel as PydanticBaseModel
@@ -481,18 +484,89 @@ class ChatRequest(PydanticBaseModel):
 
 @app.post("/api/v1/chat")
 def chat_endpoint(req: ChatRequest):
-    """
-    Phase 3 对话入口。
-
-    请求:
-      {"query": "小孩发烧39度怎么办？", "session_id": "optional"}
-
-    响应:
-      {"response": "...", "intent": "medical_qa", "route": "analysis",
-       "source": "qwen3-max", "safety_level": "normal", "retry_count": 0}
-    """
+    """Phase 4 多轮对话。返回 session_id 用于后续追问。"""
     from agents.graph import chat as agent_chat
     return agent_chat(query=req.query, session_id=req.session_id)
+
+
+# ── Phase 4: 对话记忆 ──
+from memory.database import get_memory_db
+
+@app.get("/api/v1/memory/sessions")
+def get_sessions(db: Session = Depends(get_memory_db)):
+    """列出最近活跃的 session"""
+    from memory.history import list_sessions
+    return {"sessions": list_sessions(db)}
+
+
+@app.get("/api/v1/memory/history")
+def get_chat_history(
+    session_id: str = Query(...),
+    n: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_memory_db),
+):
+    """查询某 session 的对话历史"""
+    from memory.history import get_recent_history
+    history = get_recent_history(db, session_id, n)
+    return {"session_id": session_id, "turns": len(history) // 2, "history": history}
+
+
+@app.delete("/api/v1/memory/sessions/{session_id}")
+def clear_session(session_id: str, db: Session = Depends(get_memory_db)):
+    """清除指定 session（前端清除按钮）"""
+    from memory.history import clear_session
+    count = clear_session(db, session_id)
+    return {"session_id": session_id, "deleted": count}
+
+
+# ── Phase 4: 周报 ──
+
+class WeeklyRequest(PydanticBaseModel):
+    week_start: str = None  # "YYYY-MM-DD" 周一，默认本周一
+
+
+@app.post("/api/v1/report/weekly")
+def create_weekly_report(req: WeeklyRequest, db: Session = Depends(get_memory_db)):
+    """生成周报（默认本周）"""
+    from datetime import date
+    from memory.weekly import generate_weekly_report
+    ws = date.fromisoformat(req.week_start) if req.week_start else None
+    return generate_weekly_report(db, ws)
+
+
+@app.get("/api/v1/report/weekly")
+def query_weekly_report(
+    week_start: str = Query(...),
+    db: Session = Depends(get_memory_db),
+):
+    """查询历史周报"""
+    from datetime import date
+    from memory.weekly import get_weekly_report
+    ws = date.fromisoformat(week_start)
+    result = get_weekly_report(db, ws)
+    if not result:
+        raise HTTPException(status_code=404, detail="周报不存在，请先生成")
+    return result
+
+
+@app.get("/api/v1/report/weekly/list")
+def list_weekly_reports(db: Session = Depends(get_memory_db)):
+    """列出最近 12 份历史周报"""
+    from memory.weekly import list_weekly_reports
+    return {"reports": list_weekly_reports(db)}
+
+
+# ── Phase 4: 健康趋势 ──
+
+@app.get("/api/v1/health/trend")
+def get_health_trend(
+    metric: str = Query(..., description="指标名，如 heart_rate"),
+    weeks: int = Query(4, ge=2, le=52),
+    db: Session = Depends(get_db),
+):
+    """健康指标多周趋势（含 direction + change_pct）"""
+    from memory.trend import get_trend
+    return get_trend(db, metric, weeks)
 
 
 # ============================================================

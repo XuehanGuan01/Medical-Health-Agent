@@ -251,9 +251,47 @@ Health Auto Export 默认"自上次同步"只发增量。要回填历史：
 
 每次 iPhone POST `/sync` 时，服务端自动对**当天**数据触发一次聚合。日常增量同步无需手动操作。
 
-### 5.2 全量历史聚合
+### 5.2 增量聚合（推荐，只补漏掉的天）
 
-首次上传大量历史数据后，需要手动对所有天执行聚合：
+仅对有原始数据但缺少日聚合的日期进行聚合，避免全量重算：
+
+```powershell
+python -c "
+from data_pipeline.database import SessionLocal
+from data_pipeline.aggregator import aggregate_daily_metrics
+from data_pipeline.models import RawHealthSample, DailyMetric
+from sqlalchemy import func, distinct
+from datetime import date
+
+db = SessionLocal()
+
+# 有原始数据的日期
+raw_days = set(r[0] for r in db.query(
+    func.date(RawHealthSample.start_time)
+).distinct().all())
+
+# 已有聚合的日期
+agg_days = set(r[0] for r in db.query(
+    distinct(DailyMetric.date)
+).all())
+
+# 差集 = 需要补聚合的日期
+missing = sorted(raw_days - agg_days)
+
+if missing:
+    print(f'需补聚合: {len(missing)} 天')
+    for day in missing:
+        target = date.fromisoformat(str(day))
+        aggregate_daily_metrics(db, target)
+        print(f'  {day} ✅')
+else:
+    print('所有日期已聚合，无需操作')
+
+db.close()
+"
+```
+
+### 5.3 全量重新聚合（仅在修改 config 后使用）
 
 ```powershell
 python -c "
@@ -261,28 +299,24 @@ from data_pipeline.database import SessionLocal
 from data_pipeline.aggregator import aggregate_daily_metrics
 from data_pipeline.models import RawHealthSample
 from sqlalchemy import func
-from datetime import date, datetime
+from datetime import date
 
 db = SessionLocal()
-
-# 获取数据库中有数据的所有日期
 days = db.query(
     func.date(RawHealthSample.start_time).label('day')
 ).group_by('day').order_by('day').all()
 
-print(f'共 {len(days)} 天需聚合')
-
+print(f'共 {len(days)} 天需重算')
 for (day,) in days:
     target = date.fromisoformat(str(day))
     aggregate_daily_metrics(db, target)
     print(f'  {day} ✅')
-
 db.close()
-print('全量聚合完成')
+print('全量重算完成')
 "
 ```
 
-### 5.3 验证聚合覆盖率
+### 5.4 验证聚合覆盖率
 
 ```powershell
 python -c "
@@ -300,17 +334,17 @@ for d, c in days:
 "
 ```
 
-### 5.4 日常维护清单
+### 5.5 日常维护清单
 
-| 频率 | 操作 | 命令 |
-|------|------|------|
-| 每次启动 | 启动 FastAPI + ngrok | `python -m data_pipeline.webhook_server` + `ngrok http 8000` |
-| 每次 iPhone 同步后 | 自动聚合当天 | 无需操作 |
-| 修改 config.py 后 | 重启 + 重跑全量聚合 | 见 5.2 |
-| 每周 | 查数据覆盖 `baseline` | `Invoke-RestMethod "http://localhost:8000/api/v1/health/baseline?metric_type=heart_rate&days=30"` |
-| 每周 | 备份数据库 | `copy data\health.db data\backup\health_$(Get-Date -Format yyyyMMdd).db` |
+| 频率             | 操作                 | 命令                                                                                                |
+| -------------- | ------------------ | ------------------------------------------------------------------------------------------------- |
+| 每次启动           | 启动 FastAPI + ngrok | `python -m data_pipeline.webhook_server` + `ngrok http 8000`                                      |
+| 每次 iPhone 同步后  | 自动聚合当天             | 无需操作                                                                                              |
+| 修改 config.py 后 | 重启 + 重跑全量聚合        | 见 5.2                                                                                             |
+| 每周             | 查数据覆盖 `baseline`   | `Invoke-RestMethod "http://localhost:8000/api/v1/health/baseline?metric_type=heart_rate&days=30"` |
+| 每周             | 备份数据库              | `copy data\health.db data\backup\health_$(Get-Date -Format yyyyMMdd).db`                          |
 
-### 5.5 数据库备份
+### 5.6 数据库备份
 
 ```powershell
 # 创建备份目录

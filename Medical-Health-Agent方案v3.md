@@ -35,7 +35,7 @@
 | 3   | 意图路由 + Self-RAG 医疗问答     | Phase 3  | ✅ 已完成 |
 | 4   | 健康数据分析（感知Agent）          | Phase 3  | ✅ 已完成 |
 | 5   | 硬边界拒答（安全机制）              | Phase 3  | ✅ 已完成 |
-| 6   | 对话历史 + 周报 + 趋势追踪         | Phase 4  | ❌ 待启动 |
+| 6   | 对话历史 + 周报 + 趋势追踪         | Phase 4  | ⚠️ 代码完成，待验收 |
 | 7   | 微信小程序前端（对话/看板/周报）        | Phase 5  | ❌      |
 | 8   | 多Provider LLM一键切换        | Phase 0  | ✅      |
 
@@ -85,7 +85,7 @@
 | `rag/` | 2 ✅ | 医疗知识检索 | `MedicalRetriever.search(query, k)` |
 | `agents/` | 3 ✅ | LangGraph Agent调度 | `graph.chat(query)` → `/api/v1/chat` |
 | `prompts/` | 3 ✅ | Prompt模板管理 | 5个模块（router/analysis/perception/action/boundary） |
-| `memory/` | 4 ❌ | 对话记忆+周报+趋势 | [待开发] |
+| `memory/` | 4 ⚠️ | 对话记忆+周报+趋势 | `memory/` 5个.py + 7个新API端点 |
 | `frontend/` | 5 ❌ | uni-app小程序 | [待开发] |
 
 ---
@@ -205,7 +205,7 @@ context = retriever.format_context(docs)          # → str (可直接喂给LLM)
 | **主要任务** | ①对话历史 SQLite 持久化（`chat_history` 表，含 session_id/query/response/intent/timestamp）②`/api/v1/chat` 接入多轮（读最近 N 轮历史注入 `AgentState.messages`）③`memory/weekly_summary.py` 周报生成（读 7 天 `daily_metrics` → LLM 叙事 → 存入 `weekly_reports` 表）④`memory/trend.py` 趋势查询（`/api/v1/health/trend?metric=heart_rate&weeks=4` → 周均值对比） |
 | **输入** | Phase 3（`/api/v1/chat` 已验证） + Phase 1（`daily_metrics` 真实数据） |
 | **输出** | `memory/schema.py`（SQLite 表 + ChromaDB 语义记忆 schema）、`memory/history.py`（对话历史 CRUD）、`memory/weekly_summary.py`、`memory/trend.py`、FastAPI 新端点（`/api/v1/chat` 多轮增强、`/api/v1/health/trend`、`/api/v1/report/weekly`） |
-| **状态** | ❌ 未开始。`memory/` 目录不存在 |
+| **状态** | ⚠️ 代码完成，待验收。`memory/` 5个.py + `docs/Phase4-测试手册.md` + 7个新API端点 + `data/memory.db` 独立文件 |
 | **预估工期** | 3-5天 |
 
 **Phase 4 关键设计点**：
