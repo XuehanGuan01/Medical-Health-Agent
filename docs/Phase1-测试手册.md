@@ -80,7 +80,7 @@ Invoke-RestMethod http://localhost:8000/api/v1/health/status | ConvertTo-Json -D
 ### Step 5 — 验证聚合
 
 ```powershell
-Invoke-RestMethod "http://localhost:8000/api/v1/health/daily?date=2026-05-09" | ConvertTo-Json -Depth 5
+Invoke-RestMethod "http://localhost:8000/api/v1/health/daily?date=2026-05-11" | ConvertTo-Json -Depth 5
 ```
 
 应返回各指标的 avg/min/max/stddev/sample_count。
@@ -182,7 +182,7 @@ python -c "import requests; r=requests.get('http://localhost:8000/api/v1/health/
 
 ```powershell
 # 查看具体指标数据
-python -c "import requests; r=requests.get('http://localhost:8000/api/v1/health/raw', params={'metric_type':'heart_rate','date_from':'2026-05-09'}); print(r.text)"
+python -c "import requests; r=requests.get('http://localhost:8000/api/v1/health/raw', params={'metric_type':'heart_rate','date_from':'2026-05-12'}); print(r.text)"
 ```
 ![[Pasted image 20260509175153.png]]
 ---
@@ -231,7 +231,7 @@ python -c "from data_pipeline.database import SessionLocal; from data_pipeline.a
 验证聚合结果：
 
 ```powershell
-Invoke-RestMethod "http://localhost:8000/api/v1/health/daily?date=2025-10-09" | ConvertTo-Json -Depth 5
+Invoke-RestMethod "http://localhost:8000/api/v1/health/daily?date=2026-5-13" | ConvertTo-Json -Depth 20
 ```
 
 ### 4.4 上传历史数据
@@ -245,7 +245,73 @@ Health Auto Export 默认"自上次同步"只发增量。要回填历史：
 
 ---
 
+## 4.5 删除某天数据并重新上传
+
+当某天数据明显异常（如步数显示 29 步但实际 6460 步），可能是同步中断或部分数据未上传。
+
+### Step 1 — 删除该天的原始 + 聚合数据
+
+```powershell
+python -c "
+from data_pipeline.database import SessionLocal
+from data_pipeline.models import RawHealthSample, DailyMetric
+from datetime import date, datetime, timedelta
+
+# 改这里：要删除的日期
+target = date(2026, 5, 12)
+day_start = datetime(target.year, target.month, target.day)
+day_end = day_start + timedelta(days=1)
+
+db = SessionLocal()
+
+# 删除 raw
+raw_del = db.query(RawHealthSample).filter(
+    RawHealthSample.start_time >= day_start,
+    RawHealthSample.start_time < day_end,
+).delete()
+
+# 删除聚合
+agg_del = db.query(DailyMetric).filter(
+    DailyMetric.date == target,
+).delete()
+
+db.commit()
+db.close()
+print(f'Deleted: {raw_del} raw + {agg_del} agg for {target}')
+"
+```
+
+### Step 2 — iPhone 重新上传
+
+1. 打开 Health Auto Export → Automation → **手动导出**
+2. 日期范围选 **仅那天**（如 `2026-05-12 ~ 2026-05-12`）
+3. 点导出 → 数据 POST 到后端
+
+### Step 3 — 重新聚合该天
+
+```powershell
+python -c "
+from data_pipeline.database import SessionLocal
+from data_pipeline.aggregator import aggregate_daily_metrics
+from datetime import date
+db = SessionLocal()
+aggregate_daily_metrics(db, date(2026, 5, 12))
+db.close()
+print('Re-aggregated')
+"
+```
+
+### Step 4 — 验证
+
+```powershell
+Invoke-RestMethod 'http://localhost:8000/api/v1/health/daily?date=2026-5-12' | ConvertTo-Json -Depth 3
+```
+
+---
+
 ## 五、聚合维护
+
+### 5.1 自动聚合
 
 ### 5.1 自动聚合
 
@@ -265,15 +331,14 @@ from datetime import date
 
 db = SessionLocal()
 
-# 有原始数据的日期
-raw_days = set(r[0] for r in db.query(
-    func.date(RawHealthSample.start_time)
-).distinct().all())
+# 有原始数据的日期（func.date() 返回 str，需转 date 对象）
+raw_days = set(
+    date.fromisoformat(str(r[0]))
+    for r in db.query(func.date(RawHealthSample.start_time)).distinct().all()
+)
 
-# 已有聚合的日期
-agg_days = set(r[0] for r in db.query(
-    distinct(DailyMetric.date)
-).all())
+# 已有聚合的日期（DailyMetric.date 是 Date 类型 → datetime.date）
+agg_days = set(r[0] for r in db.query(distinct(DailyMetric.date)).all())
 
 # 差集 = 需要补聚合的日期
 missing = sorted(raw_days - agg_days)
@@ -281,8 +346,7 @@ missing = sorted(raw_days - agg_days)
 if missing:
     print(f'需补聚合: {len(missing)} 天')
     for day in missing:
-        target = date.fromisoformat(str(day))
-        aggregate_daily_metrics(db, target)
+        aggregate_daily_metrics(db, day)
         print(f'  {day} ✅')
 else:
     print('所有日期已聚合，无需操作')

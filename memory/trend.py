@@ -37,12 +37,13 @@ def get_trend(db: Session, metric_type: str, weeks: int = 4) -> dict:
       }
     """
     today = date.today()
-    start_date = today - timedelta(weeks=weeks * 7)
+    start_date = today - timedelta(days=weeks * 7)
 
     rows = (
         db.query(
             DailyMetric.date,
             DailyMetric.avg_value,
+            DailyMetric.total_value,
             DailyMetric.min_value,
             DailyMetric.max_value,
             DailyMetric.sample_count,
@@ -60,6 +61,13 @@ def get_trend(db: Session, metric_type: str, weeks: int = 4) -> dict:
     if not rows:
         return {"error": f"No data for {metric_type} in last {weeks} weeks"}
 
+    # 累积型指标用 total_value，其他用 avg_value
+    cumulative = {'step_count', 'active_energy', 'basal_energy_burned',
+        'apple_exercise_time', 'apple_stand_time', 'walking_running_distance',
+        'flights_climbed', 'sleep_analysis', 'cycling_distance', 'handwashing',
+        'environmental_audio_exposure', 'headphone_audio_exposure',
+        'time_in_daylight', 'mindful_minutes', 'running_power', 'running_speed'}
+
     # 按周分组
     weeks_data_dict = defaultdict(list)
     for r in rows:
@@ -71,18 +79,21 @@ def get_trend(db: Session, metric_type: str, weeks: int = 4) -> dict:
     week_avgs = []
     for monday in sorted(weeks_data_dict.keys()):
         day_rows = weeks_data_dict[monday]
-        avgs = [r.avg_value for r in day_rows if r.avg_value is not None]
+        use_total = metric_type in cumulative
+        values = [(r.total_value if use_total else r.avg_value)
+                  for r in day_rows
+                  if (r.total_value if use_total else r.avg_value) is not None]
         mins = [r.min_value for r in day_rows if r.min_value is not None]
         maxs = [r.max_value for r in day_rows if r.max_value is not None]
         result_weeks.append({
             "week_start": str(monday),
-            "avg": round(sum(avgs) / len(avgs), 2) if avgs else None,
+            "avg": round(sum(values) / len(values), 2) if values else None,
             "min": round(min(mins), 2) if mins else None,
             "max": round(max(maxs), 2) if maxs else None,
             "days": len(day_rows),
         })
-        if avgs:
-            week_avgs.append(sum(avgs) / len(avgs))
+        if values:
+            week_avgs.append(sum(values) / len(values))
 
     # 趋势方向
     direction = "stable"

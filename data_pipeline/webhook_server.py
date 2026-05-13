@@ -16,6 +16,7 @@ from datetime import date, datetime, timezone
 from typing import Optional
 
 from fastapi import FastAPI, Depends, HTTPException, Header, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -56,6 +57,13 @@ app = FastAPI(
     version="2.0.0",
     description="Phase 1: Apple Health 数据采集与聚合",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -335,12 +343,19 @@ def _log_sync(db: Session, metrics_count: int, data_points: int,
 
 @app.get("/api/v1/health/daily")
 def get_daily_metrics(
-    date: str = Query(..., description="日期 YYYY-MM-DD"),
+    date: str = Query(..., description="日期 YYYY-MM-DD（兼容 2026-5-11）"),
     metric: Optional[str] = Query(None, description="指标名，不传返回全部"),
     db: Session = Depends(get_db),
 ):
     """查询某一天的聚合指标"""
-    q = db.query(DailyMetric).filter(DailyMetric.date == date)
+    # 标准化日期格式（2026-5-11 → 2026-05-11）
+    from dateutil import parser as dt_parser
+    try:
+        parsed = dt_parser.parse(date)
+        normalized = parsed.strftime("%Y-%m-%d")
+    except Exception:
+        normalized = date  # fallback
+    q = db.query(DailyMetric).filter(DailyMetric.date == normalized)
     if metric:
         q = q.filter(DailyMetric.metric_type == metric)
 
@@ -373,8 +388,9 @@ def get_raw_samples(
     db: Session = Depends(get_db),
 ):
     """查询原始健康数据点"""
-    start = datetime.strptime(date_from, "%Y-%m-%d")
-    end = datetime.strptime(date_to, "%Y-%m-%d") if date_to else None
+    from dateutil import parser as dt_parser
+    start = dt_parser.parse(date_from)
+    end = dt_parser.parse(date_to) if date_to else None
 
     q = db.query(RawHealthSample).filter(
         RawHealthSample.metric_type == metric_type,
@@ -479,7 +495,7 @@ from pydantic import BaseModel as PydanticBaseModel
 
 class ChatRequest(PydanticBaseModel):
     query: str
-    session_id: str = None
+    session_id: Optional[str] = None
 
 
 @app.post("/api/v1/chat")
@@ -522,7 +538,7 @@ def clear_session(session_id: str, db: Session = Depends(get_memory_db)):
 # ── Phase 4: 周报 ──
 
 class WeeklyRequest(PydanticBaseModel):
-    week_start: str = None  # "YYYY-MM-DD" 周一，默认本周一
+    week_start: Optional[str] = None  # "YYYY-MM-DD" 周一，默认本周一
 
 
 @app.post("/api/v1/report/weekly")

@@ -1,5 +1,6 @@
-"""对话生成节点"""
+"""对话生成节点（含时间上下文）"""
 import logging
+from datetime import datetime, timezone
 
 from config.llm import get_action_llm
 from agents.state import AgentState
@@ -7,6 +8,24 @@ from prompts.action import ACTION_SYSTEM, ACTION_USER
 from langchain_core.messages import SystemMessage, HumanMessage
 
 logger = logging.getLogger("agent.action")
+
+
+def _time_greeting() -> str:
+    hour = datetime.now().hour
+    if 5 <= hour < 9:    return "早上好"
+    elif 9 <= hour < 12:  return "上午好"
+    elif 12 <= hour < 14: return "中午好"
+    elif 14 <= hour < 18: return "下午好"
+    else:                 return "晚上好"
+
+
+def _time_context() -> tuple[str, str]:
+    now = datetime.now(timezone.utc)
+    # 北京时间 = UTC+8
+    bj = now.replace(hour=(now.hour + 8) % 24)
+    time_str = bj.strftime("%H:%M")
+    date_str = bj.strftime("%Y-%m-%d")
+    return time_str, date_str
 
 
 def action_node(state: AgentState) -> dict:
@@ -30,9 +49,12 @@ def action_node(state: AgentState) -> dict:
     context_block = "\n\n".join(parts) if parts else "无额外上下文"
     query = state.get("query", "")
 
+    time_now, date_today = _time_context()
     llm = get_action_llm()
     messages = [
-        SystemMessage(content=ACTION_SYSTEM),
+        SystemMessage(content=ACTION_SYSTEM.format(
+            time_now=time_now, date_today=date_today,
+        )),
         HumanMessage(content=ACTION_USER.format(
             context_block=context_block, query=query,
         )),

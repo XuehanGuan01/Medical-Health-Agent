@@ -11,31 +11,60 @@ API_KEY = os.getenv("HEALTH_API_KEY", "medical-health-agent-dev-key-2026")
 HOST = os.getenv("HEALTH_HOST", "0.0.0.0")
 PORT = int(os.getenv("HEALTH_PORT", "8000"))
 
-# ── 聚合配置 ────────────────────────────────────────────
+# ── 聚合配置 (全部 39 种 iOS 指标) ──────────────────────
 AGGREGATION_METRICS = [
-    # 心脏
+    # 心脏 (4)
     "heart_rate",
     "resting_heart_rate",
     "heart_rate_variability",
-    # 活动
+    "walking_heart_rate_average",
+    "cardio_recovery",
+    # 活动 (10)
     "step_count",
     "active_energy",
     "basal_energy_burned",
     "apple_exercise_time",
     "apple_stand_time",
+    "apple_stand_hour",
     "walking_running_distance",
     "flights_climbed",
-    # 步行
+    "physical_effort",
+    "vo2_max",
+    # 步行 (5)
     "walking_speed",
     "walking_step_length",
     "walking_asymmetry_percentage",
     "walking_double_support_percentage",
-    # 身体
-    "physical_effort",
-    # 呼吸
+    "six_minute_walking_test_distance",
+    # 楼梯 (2)
+    "stair_speed_down",
+    "stair_speed_up",
+    # 跑步 (4)
+    "running_power",
+    "running_speed",
+    "running_ground_contact_time",
+    "running_vertical_oscillation",
+    "running_stride_length",
+    # 骑行 (1)
+    "cycling_distance",
+    # 呼吸 (1)
     "respiratory_rate",
+    # 睡眠 (1)
+    "sleep_analysis",
+    # 身体 (4)
+    "weight_body_mass",
+    "body_fat_percentage",
+    "body_mass_index",
+    "height",
+    # 环境 (3)
+    "environmental_audio_exposure",
+    "headphone_audio_exposure",
+    "time_in_daylight",
+    # 正念 (1)
+    "mindful_minutes",
+    # 其他 (2)
+    "handwashing",
     "blood_oxygen_saturation",
-    # 其他
     "wrist_temperature",
 ]
 
