@@ -12,6 +12,16 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 logger = logging.getLogger("agent.perception")
 
+# 累积型指标：对 LLM 展示 total_value（日总量），avg（每次采样均值）无意义
+CUMULATIVE_METRICS = {
+    "step_count", "active_energy", "basal_energy_burned",
+    "apple_exercise_time", "apple_stand_time", "apple_stand_hour",
+    "walking_running_distance", "flights_climbed",
+    "sleep_analysis", "cycling_distance",
+    "environmental_audio_exposure", "headphone_audio_exposure",
+    "time_in_daylight", "mindful_minutes", "handwashing",
+}
+
 PERCEPTION_SYSTEM = """你是专业的个人健康数据分析师。基于提供的健康数据，进行全面深入的分析。
 
 **核心要求**：
@@ -74,7 +84,8 @@ def perception_node(state: AgentState) -> dict:
                 deviation = round((m.avg_value - bl["mean"]) / bl["std"], 2)
 
             by_date[d][m.metric_type] = {
-                "avg": m.avg_value, "min": m.min_value, "max": m.max_value,
+                "avg": m.avg_value, "total": m.total_value,
+                "min": m.min_value, "max": m.max_value,
                 "stddev": m.stddev_value, "samples": m.sample_count,
                 "baseline_mean": bl.get("mean"),
                 "upper_bound": bl.get("upper_bound"),
@@ -134,8 +145,13 @@ def perception_node(state: AgentState) -> dict:
             if m["deviation_sigma"] is not None and abs(m["deviation_sigma"]) >= 1.5:
                 direction = "↑" if m["deviation_sigma"] > 0 else "↓"
                 dev_str = f" | ⚠️偏离基线 {direction}{abs(m['deviation_sigma'])}σ"
+            # 累积型指标展示 total；瞬时型展示 avg
+            if metric_key in CUMULATIVE_METRICS:
+                val_str = f"total={m['total']} (avg={m['avg']}, range {m['min']}~{m['max']})"
+            else:
+                val_str = f"avg={m['avg']} (range {m['min']}~{m['max']})"
             lines.append(
-                f"- **{label}**: avg={m['avg']} (range {m['min']}~{m['max']}), "
+                f"- **{label}**: {val_str}, "
                 f"baseline={m['baseline_mean']}, samples={m['samples']}{dev_str}"
             )
 

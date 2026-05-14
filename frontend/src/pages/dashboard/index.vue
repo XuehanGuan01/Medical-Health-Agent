@@ -23,34 +23,27 @@
       </div>
     </div>
 
-    <!-- 趋势图 -->
+    <!-- 趋势图 — 每日数据点 -->
     <div class="section" v-for="t in trendMetrics" :key="t.metric">
-      <span class="section-title">{{ labelFor(t.metric) }} — Last 4 Weeks</span>
+      <span class="section-title">{{ labelFor(t.metric) }} — Last 7 Days</span>
 
-      <!-- 有数据 -->
-      <template v-if="healthStore.trends[t.metric] && !healthStore.trends[t.metric].error">
+      <template v-if="healthStore.trends[t.metric]?.data_points?.length">
         <svg class="line-chart" :viewBox="'0 0 ' + chartW + ' ' + chartH" preserveAspectRatio="none">
           <polyline :points="linePoints(t.metric)" fill="none" stroke="#4A90D9" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
           <circle v-for="(p, i) in scatterPoints(t.metric)" :key="i" :cx="p.x" :cy="p.y" r="4" fill="#fff" stroke="#4A90D9" stroke-width="2.5" />
         </svg>
-        <!-- x轴标签 -->
         <div class="chart-x-labels">
-          <span v-for="(w, i) in healthStore.trends[t.metric].weeks_data" :key="i" class="x-label">{{ w.week_start?.slice(5) }}</span>
+          <span v-for="(d, i) in healthStore.trends[t.metric].data_points" :key="i" class="x-label">{{ d.date?.slice(5) }}</span>
         </div>
         <span class="trend-text">
-          {{ healthStore.trends[t.metric].trend_direction === 'rising' ? '↑ Rising' : healthStore.trends[t.metric].trend_direction === 'falling' ? '↓ Falling' : '→ Stable' }}
-          <template v-if="healthStore.trends[t.metric].change_pct !== undefined">
-            ({{ formatChange(healthStore.trends[t.metric].change_pct) }})
-          </template>
-          <template v-if="healthStore.trends[t.metric].overall_mean">
-            | avg: {{ healthStore.trends[t.metric].overall_mean.toFixed(1) }}
-          </template>
+          {{ healthStore.trends[t.metric].trend_direction === 'rising' ? '↑' : healthStore.trends[t.metric].trend_direction === 'falling' ? '↓' : '→' }}
+          {{ formatChange(healthStore.trends[t.metric].change_pct || 0) }}
+          | avg: {{ healthStore.trends[t.metric].overall_mean?.toFixed(1) }}
         </span>
       </template>
 
-      <!-- 加载中 / 无数据 -->
       <div class="chart-box" v-else>
-        <span class="no-data">Loading trend data...</span>
+        <span class="no-data">Loading...</span>
       </div>
     </div>
 
@@ -78,7 +71,7 @@ const cumulativeMetrics = new Set(['step_count', 'active_energy', 'basal_energy_
   'headphone_audio_exposure', 'time_in_daylight', 'mindful_minutes'])
 const displayValue = (m) => {
   if (m.metric_type === 'sleep_analysis' && m.total_value != null) {
-    return (m.total_value / 60).toFixed(1) + 'h'  // 分钟→小时
+    return (m.total_value / 60).toFixed(1) + 'h'
   }
   if (cumulativeMetrics.has(m.metric_type) && m.total_value != null) {
     return m.total_value.toFixed(0)
@@ -106,27 +99,27 @@ const iconMap = {
   blood_oxygen_saturation: '🩸', wrist_temperature: '🌡️',
 }
 const labelMap = {
-  heart_rate: 'Heart Rate', resting_heart_rate: 'Resting HR',
-  heart_rate_variability: 'HRV', step_count: 'Steps',
-  active_energy: 'Active Energy', basal_energy_burned: 'Basal Energy',
-  apple_exercise_time: 'Exercise', apple_stand_time: 'Stand Time',
-  apple_stand_hour: 'Stand Hours', respiratory_rate: 'Respiratory',
-  walking_running_distance: 'Distance', walking_speed: 'Walk Speed',
-  walking_step_length: 'Step Length', walking_asymmetry_percentage: 'Asymmetry',
-  walking_double_support_percentage: 'Dbl Support',
-  walking_heart_rate_average: 'Walk HR Avg', flights_climbed: 'Flights',
-  physical_effort: 'Effort', environmental_audio_exposure: 'Env Noise',
-  headphone_audio_exposure: 'HP Noise', time_in_daylight: 'Daylight',
-  sleep_analysis: 'Sleep', mindful_minutes: 'Mindful', handwashing: 'Handwash',
-  vo2_max: 'VO2 Max', cardio_recovery: 'Cardio Rec',
-  stair_speed_down: 'Stair Down', stair_speed_up: 'Stair Up',
-  running_power: 'Run Power', running_speed: 'Run Speed',
-  running_ground_contact_time: 'Grd Contact',
-  running_vertical_oscillation: 'Vert Osc', running_stride_length: 'Run Stride',
-  cycling_distance: 'Cycling', weight_body_mass: 'Weight',
-  body_fat_percentage: 'Body Fat', body_mass_index: 'BMI', height: 'Height',
-  six_minute_walking_test_distance: '6min Walk',
-  blood_oxygen_saturation: 'SpO2', wrist_temperature: 'Wrist Temp',
+  heart_rate: '心率 (Heart Rate)', resting_heart_rate: '静息心率 (Resting HR)',
+  heart_rate_variability: '心率变异性 (HRV)', step_count: '步数 (Steps)',
+  active_energy: '活动能量 (Active Energy)', basal_energy_burned: '基础代谢 (Basal Energy)',
+  apple_exercise_time: '运动时长 (Exercise)', apple_stand_time: '站立时长 (Stand)',
+  apple_stand_hour: '站立小时 (Stand Hr)', respiratory_rate: '呼吸频率 (Respiratory)',
+  walking_running_distance: '步行距离 (Distance)', walking_speed: '步行速度 (Walk Speed)',
+  walking_step_length: '步长 (Step Len)', walking_asymmetry_percentage: '步行不对称 (Asymmetry)',
+  walking_double_support_percentage: '双支撑 (Dbl Support)',
+  walking_heart_rate_average: '步行心率 (Walk HR)', flights_climbed: '爬楼 (Flights)',
+  physical_effort: '身体负荷 (Effort)', environmental_audio_exposure: '环境噪音 (Env Noise)',
+  headphone_audio_exposure: '耳机噪音 (HP Noise)', time_in_daylight: '日照时长 (Daylight)',
+  sleep_analysis: '睡眠 (Sleep)', mindful_minutes: '正念分钟 (Mindful)', handwashing: '洗手 (Handwash)',
+  vo2_max: '最大摄氧量 (VO2 Max)', cardio_recovery: '心率恢复 (Cardio Rec)',
+  stair_speed_down: '下楼梯速度 (Stair Down)', stair_speed_up: '上楼梯速度 (Stair Up)',
+  running_power: '跑步功率 (Run Power)', running_speed: '跑步速度 (Run Speed)',
+  running_ground_contact_time: '触地时间 (Grd Contact)',
+  running_vertical_oscillation: '垂直摆动 (Vert Osc)', running_stride_length: '跑步步幅 (Run Stride)',
+  cycling_distance: '骑行距离 (Cycling)', weight_body_mass: '体重 (Weight)',
+  body_fat_percentage: '体脂率 (Body Fat)', body_mass_index: 'BMI', height: '身高 (Height)',
+  six_minute_walking_test_distance: '6分钟步行 (6min Walk)',
+  blood_oxygen_saturation: '血氧 (SpO2)', wrist_temperature: '手腕温度 (Wrist Temp)',
 }
 const iconFor = (m) => iconMap[m] || '📊'
 const labelFor = (m) => labelMap[m] || m.replace(/_/g, ' ')
@@ -159,16 +152,16 @@ const linePoints = (metric) => {
 }
 
 const scatterPoints = (metric) => {
-  const data = healthStore.trends[metric]?.weeks_data || []
+  const data = healthStore.trends[metric]?.data_points || []
   if (!data.length) return []
-  const vals = data.map(w => w.avg).filter(v => v != null)
-  const vMin = Math.min(...vals, 1) * 0.9
-  const vMax = Math.max(...vals, 1) * 1.1
+  const vals = data.map(d => d.value).filter(v => v != null)
+  const vMin = Math.min(...vals, 1) * 0.85
+  const vMax = Math.max(...vals, 1) * 1.15
   const range = vMax - vMin || 1
   const w = (chartW - padX * 2) / Math.max(data.length - 1, 1)
   return data.map((d, i) => ({
     x: padX + i * w,
-    y: chartH - padY - ((d.avg ?? vMin) - vMin) / range * (chartH - padY * 2),
+    y: chartH - padY - ((d.value ?? vMin) - vMin) / range * (chartH - padY * 2),
   }))
 }
 

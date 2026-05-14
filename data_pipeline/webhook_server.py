@@ -49,7 +49,13 @@ async def lifespan(app: FastAPI):
     # Phase 4: 初始化 memory.db
     from memory.database import init_memory_db
     init_memory_db()
-    logger.info("Database initialized successfully (health + memory)")
+    # 周报表放 health.db（与 DailyMetric 同库）
+    from data_pipeline.database import engine as health_engine
+    from memory.schema import WeeklyReport
+    from sqlalchemy import inspect
+    if not inspect(health_engine).has_table("weekly_reports"):
+        WeeklyReport.__table__.create(bind=health_engine)
+    logger.info("Database initialized successfully (health + memory + weekly_report)")
     yield
 
 app = FastAPI(
@@ -542,7 +548,7 @@ class WeeklyRequest(PydanticBaseModel):
 
 
 @app.post("/api/v1/report/weekly")
-def create_weekly_report(req: WeeklyRequest, db: Session = Depends(get_memory_db)):
+def create_weekly_report(req: WeeklyRequest, db: Session = Depends(get_db)):
     """生成周报（默认本周）"""
     from datetime import date
     from memory.weekly import generate_weekly_report
@@ -553,7 +559,7 @@ def create_weekly_report(req: WeeklyRequest, db: Session = Depends(get_memory_db
 @app.get("/api/v1/report/weekly")
 def query_weekly_report(
     week_start: str = Query(...),
-    db: Session = Depends(get_memory_db),
+    db: Session = Depends(get_db),
 ):
     """查询历史周报"""
     from datetime import date
@@ -566,7 +572,7 @@ def query_weekly_report(
 
 
 @app.get("/api/v1/report/weekly/list")
-def list_weekly_reports(db: Session = Depends(get_memory_db)):
+def list_weekly_reports(db: Session = Depends(get_db)):
     """列出最近 12 份历史周报"""
     from memory.weekly import list_weekly_reports
     return {"reports": list_weekly_reports(db)}
@@ -577,12 +583,13 @@ def list_weekly_reports(db: Session = Depends(get_memory_db)):
 @app.get("/api/v1/health/trend")
 def get_health_trend(
     metric: str = Query(..., description="指标名，如 heart_rate"),
-    weeks: int = Query(4, ge=2, le=52),
+    weeks: int = Query(7, ge=2, le=366),
+    granularity: str = Query("day", description="day | week"),
     db: Session = Depends(get_db),
 ):
-    """健康指标多周趋势（含 direction + change_pct）"""
+    """健康指标趋势（day=每日数据点, week=按周聚合）"""
     from memory.trend import get_trend
-    return get_trend(db, metric, weeks)
+    return get_trend(db, metric, weeks, granularity)
 
 
 # ============================================================

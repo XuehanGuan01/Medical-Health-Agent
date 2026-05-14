@@ -2,58 +2,58 @@
   <div class="settings-page">
     <!-- 数据同步 -->
     <div class="card" v-if="healthStore.syncInfo">
-      <span class="card-title">Sync Status</span>
+      <span class="card-title">同步状态 (Sync Status)</span>
       <div class="sync-row">
-        <span class="sync-label">Last Sync</span>
+        <span class="sync-label">最近同步 (Last Sync)</span>
         <span class="sync-val">{{ healthStore.syncInfo.last_sync?.time?.slice(0, 19) || 'N/A' }}</span>
       </div>
       <div class="sync-row">
-        <span class="sync-label">Total Records</span>
+        <span class="sync-label">数据总量 (Total Records)</span>
         <span class="sync-val">{{ (healthStore.syncInfo.database?.total_raw_samples || 0).toLocaleString() }}</span>
       </div>
       <div class="sync-row">
-        <span class="sync-label">Aggregated Days</span>
+        <span class="sync-label">聚合天数 (Aggregated Days)</span>
         <span class="sync-val">{{ healthStore.syncInfo.database?.total_daily_metrics || 0 }}</span>
       </div>
       <div class="sync-row">
-        <span class="sync-label">Sync App</span>
+        <span class="sync-label">同步应用 (Sync App)</span>
         <span class="sync-val">Health Auto Export (Lybron Sobers)</span>
       </div>
       <div class="sync-row">
-        <span class="sync-label">Data Source</span>
+        <span class="sync-label">数据来源 (Data Source)</span>
         <span class="sync-val">Apple Health + Apple Watch</span>
       </div>
     </div>
 
     <!-- 关于 -->
     <div class="card">
-      <span class="card-title">About</span>
+      <span class="card-title">关于 (About)</span>
       <div class="about-row">
-        <span class="about-label">Version</span>
+        <span class="about-label">版本 (Version)</span>
         <span class="about-val">v3.0 (Phase 5)</span>
       </div>
       <div class="about-row">
-        <span class="about-label">LLM Engine</span>
+        <span class="about-label">大语言模型 (LLM)</span>
         <span class="about-val">Qwen3-Max / DeepSeek V4</span>
       </div>
       <div class="about-row">
-        <span class="about-label">Embedding</span>
+        <span class="about-label">嵌入模型 (Embedding)</span>
         <span class="about-val">DashScope text-embedding-v4</span>
       </div>
       <div class="about-row">
-        <span class="about-label">RAG Knowledge</span>
-        <span class="about-val">HuatuoGPT 276K QA pairs</span>
+        <span class="about-label">知识库 (RAG)</span>
+        <span class="about-val">HuatuoGPT 27.6万条</span>
       </div>
       <div class="about-row">
-        <span class="about-label">Data Pipeline</span>
+        <span class="about-label">数据管道 (Data Pipeline)</span>
         <span class="about-val">FastAPI + SQLite + ChromaDB</span>
       </div>
       <div class="about-row">
-        <span class="about-label">Agent Graph</span>
+        <span class="about-label">智能体引擎 (Agent)</span>
         <span class="about-val">LangGraph StateGraph (Self-RAG)</span>
       </div>
       <div class="about-row">
-        <span class="about-label">Frontend</span>
+        <span class="about-label">前端框架 (Frontend)</span>
         <span class="about-val">Vue 3 + Vite + Pinia</span>
       </div>
     </div>

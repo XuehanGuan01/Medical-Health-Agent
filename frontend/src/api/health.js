@@ -11,5 +11,5 @@ export const getTodayMetrics = (date) =>
 export const getBaseline = (metric, days = 30) =>
   request('/api/v1/health/baseline', { data: { metric_type: metric, days } })
 
-export const getTrend = (metric, weeks = 4) =>
-  request('/api/v1/health/trend', { data: { metric, weeks } })
+export const getTrend = (metric, days = 7) =>
+  request('/api/v1/health/trend', { data: { metric, weeks: days, granularity: 'day' } })

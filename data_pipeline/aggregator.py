@@ -56,14 +56,18 @@ def _aggregate_one_metric(db: Session, metric_type: str, target_date: date,
         DailyMetric.metric_type == metric_type,
     ).delete()
 
+    # 重叠摘要型指标: 同一事件的多条重叠记录 → MAX 代替 SUM/MEAN
+    OVERLAP_METRICS = {"sleep_analysis"}
+    is_overlap = metric_type in OVERLAP_METRICS
+
     daily = DailyMetric(
         date=target_date,
         metric_type=metric_type,
-        avg_value=round(float(np.mean(values)), 2),
+        avg_value=round(float(np.max(values)), 2) if is_overlap else round(float(np.mean(values)), 2),
         min_value=round(float(np.min(values)), 2),
         max_value=round(float(np.max(values)), 2),
-        stddev_value=round(float(np.std(values)), 2) if len(values) > 1 else 0.0,
-        total_value=round(float(np.sum(values)), 2),
+        stddev_value=round(float(np.std(values)), 2) if len(values) > 1 and not is_overlap else 0.0,
+        total_value=round(float(np.max(values)), 2) if is_overlap else round(float(np.sum(values)), 2),
         sample_count=len(values),
         unit=unit,
         created_at=datetime.now(timezone.utc),

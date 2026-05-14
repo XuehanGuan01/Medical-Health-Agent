@@ -272,6 +272,106 @@ GET 请求的 `data` 参数被放入 `body`（浏览器忽略）→ 后端收不
 
 ## 九、完整 Bug 索引 (B1-B25)
 
+| #   | 类别         | 问题                       | 状态  |
+| --- | ---------- | ------------------------ | :-: |
+| B1  | Perception | 日期僵硬 + 指标不全              |  ✅  |
+| B2  | 前端         | Self-RAG 超时 30s→120s     |  ✅  |
+| B3  | 后端         | Pydantic 422 session_id  |  ✅  |
+| B4  | 前端         | @tap→@click + 检测按钮       |  ✅  |
+| B5  | 前端         | Report uni-app 组件 → HTML |  ✅  |
+| B6  | 后端         | 日期格式兼容 dateutil          |  ✅  |
+| B7  | 聚合         | 增量聚合类型不匹配                |  ✅  |
+| B8  | 前端         | 会话切换无反馈                  |  ✅  |
+| B9  | 前端         | 设置页白框                    |  ✅  |
+| B10 | Prompt     | 回复含 Markdown 符号          |  ✅  |
+| B11 | 前端         | 等待无进度反馈                  |  ✅  |
+| B12 | 前端         | Dashboard 空数据回退          |  ✅  |
+| B13 | 后端         | CORS OPTIONS 405         |  ✅  |
+| B14 | 后端         | 周报 POST 422              |  ✅  |
+| B15 | 聚合         | 39 种指标全量聚合               |  ✅  |
+| B16 | 前端         | Dashboard 标签 9→39        |  ✅  |
+| B17 | 前端         | Report 标签 9→39           |  ✅  |
+| B18 | Agent      | Perception 标签 16→39      |  ✅  |
+| B19 | UI/UX      | Settings+Markdown+进度     |  ✅  |
+| B20 | Router     | 关键词快速分类                  |  ✅  |
+| B21 | 前端         | 进度条实时更新                  |  ✅  |
+| B22 | Agent      | 日期感知 3天+时间               |  ✅  |
+| B23 | Agent      | 时间问候语                    |  ✅  |
+| B24 | 前端         | GET 参数拼 URL              |  ✅  |
+| B25 | 前端         | 会话删除按钮                   |  ✅  |
+
+---
+
+## 十、Phase 5 v4 — 看板与趋势重构 (2026-05-14)
+
+### 问题背景
+
+Dashboard 测试发现：趋势图日期错误（从 Oct 27 开始而非最近 4 周）、柱状图全部几乎无高度、睡眠显示 629 hr、页面无法滚动、指标标题不明确。
+
+### B26 — 趋势 API 日期过滤 Bug 🔴
+
+`timedelta(weeks=weeks * 7)` 被 Python 解析为 `timedelta(weeks=28)` = 196 天而非 28 天。改为 `timedelta(days=weeks * 7)`。
+
+**影响**：`memory/trend.py`
+
+### B27 — 趋势 API 累积指标用错字段 🔴
+
+趋势查询对所有指标使用 `avg_value`，但步数/能量/睡眠等累积型指标应用 `total_value`（日均 vs 日总和）。修复：趋势 API 新增 `total_value` 列查询，15 种累积型指标按类型取值；Dashboard 动态 `barHeight` 计算。
+
+**影响**：`memory/trend.py`、`frontend/.../dashboard/index.vue`
+
+### B28 — Dashboard 柱状图 → SVG 折线图 🔴
+
+柱状图硬编码 max 值导致柱子高度异常（步数 27 vs max=12000 → 0.2%）。改为 SVG `<polyline>` + `<circle>` 折线图，Y 轴自动 `vMin*0.9 ~ vMax*1.1` 缩放，X 轴标注每周一日期。
+
+**影响**：`frontend/.../dashboard/index.vue`
+
+### B29 — 页面不可滚动 + 标题缺失 🟡
+
+`min-height` → `height: calc(100vh - 56px); overflow-y: auto`。卡片上方加 "Today's Data — YYYY-MM-DD" 标题。展示全部 39 种指标卡片（不再截断为 8 张）。
+
+**影响**：`frontend/.../dashboard/index.vue`
+
+### B30 — 睡眠数据单位修正 🟡
+
+raw 数据单位标注 "hr" 但实际值是分钟（437.8min ≈ 7.3h）。Dashboard 卡片 `displayValue` 对 sleep_analysis 除以 60 显示 `10.5h`。
+
+**影响**：`frontend/.../dashboard/index.vue`
+
+### B31 — Router 极速版 🔴
+
+意图路由从 ~2s LLM 调用改为关键词优先匹配（15+ 健康词 + 15+ 医疗词），80%+ 查询 <0.01s。仅模糊查询调 LLM 兜底。
+
+**影响**：`agents/router.py`（重写）
+
+### B32 — 进度实时更新 🔴
+
+`Date.now()` 在 Vue `computed` 中不触发响应式 → `setInterval` 每 0.5s 更新 `elapsed` → 进度标签实时跳动（意图分析→检索→生成→自检）。
+
+**影响**：`frontend/.../chat/index.vue`
+
+### B33 — 日期感知 v4 + 时间问候 🟡
+
+Perception: 始终给 LLM 3 天数据 + 当前时间 + "今天尚未结束"。Action: 根据北京时段问候（早上好/下午好/晚上好）+ 传入具体时间。
+
+**影响**：`agents/perception.py`、`agents/action.py`、`prompts/action.py`
+
+### B34 — 会话切换 + 删除修复 🔴
+
+GET 请求 `data` 参数放入 `body`（浏览器忽略）→ 改为 URL 查询字符串。新增 ✕ 删除按钮调 `DELETE /api/v1/memory/sessions/{id}`。
+
+**影响**：`frontend/src/api/request.js`、`frontend/.../chat/index.vue`
+
+### B35 — 删除某天数据并重传 🟡
+
+Phase1 测试手册新增 §4.5：删除指定日期 raw + agg → iPhone 手动导出仅那天 → 重新聚合。
+
+**影响**：`docs/Phase1-测试手册.md`
+
+---
+
+## 十一、完整 Bug 索引 (B1-B35)
+
 | # | 类别 | 问题 | 状态 |
 |---|------|------|:--:|
 | B1 | Perception | 日期僵硬 + 指标不全 | ✅ |
@@ -283,7 +383,7 @@ GET 请求的 `data` 参数被放入 `body`（浏览器忽略）→ 后端收不
 | B7 | 聚合 | 增量聚合类型不匹配 | ✅ |
 | B8 | 前端 | 会话切换无反馈 | ✅ |
 | B9 | 前端 | 设置页白框 | ✅ |
-| B10 | Prompt | 回复含 Markdown 符号 | ✅ |
+| B10 | Prompt | 回复含 Markdown 符号→改为 MD 渲染 | ✅ |
 | B11 | 前端 | 等待无进度反馈 | ✅ |
 | B12 | 前端 | Dashboard 空数据回退 | ✅ |
 | B13 | 后端 | CORS OPTIONS 405 | ✅ |
@@ -292,10 +392,20 @@ GET 请求的 `data` 参数被放入 `body`（浏览器忽略）→ 后端收不
 | B16 | 前端 | Dashboard 标签 9→39 | ✅ |
 | B17 | 前端 | Report 标签 9→39 | ✅ |
 | B18 | Agent | Perception 标签 16→39 | ✅ |
-| B19 | UI/UX | Settings+Markdown+进度 | ✅ |
+| B19 | UI/UX | Settings+MD渲染+进度 | ✅ |
 | B20 | Router | 关键词快速分类 | ✅ |
-| B21 | 前端 | 进度条实时更新 | ✅ |
+| B21 | 前端 | 进度条 setInterval 实时 | ✅ |
 | B22 | Agent | 日期感知 3天+时间 | ✅ |
 | B23 | Agent | 时间问候语 | ✅ |
 | B24 | 前端 | GET 参数拼 URL | ✅ |
 | B25 | 前端 | 会话删除按钮 | ✅ |
+| B26 | 后端 | 趋势 timedelta 196天→28天 | ✅ |
+| B27 | 后端 | 趋势累积指标用 total_value | ✅ |
+| B28 | 前端 | Dashboard 柱状图→SVG折线图 | ✅ |
+| B29 | 前端 | 页面滚动 + Today标题 | ✅ |
+| B30 | 前端 | 睡眠 min→hr 转换 | ✅ |
+| B31 | Agent | Router 关键词优先 | ✅ |
+| B32 | 前端 | 进度实时跳动 | ✅ |
+| B33 | Agent | 日期+时间上下文注入 | ✅ |
+| B34 | 前端 | 会话切换/删除修复 | ✅ |
+| B35 | 文档 | Phase1测试手册 §4.5 | ✅ |

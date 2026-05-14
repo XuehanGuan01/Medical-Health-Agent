@@ -38,7 +38,7 @@ export const useHealthStore = defineStore('health', {
     },
     async loadTrend(metric) {
       try {
-        const res = await getTrend(metric, 4)
+        const res = await getTrend(metric, 7)
         this.trends[metric] = res
       } catch { /* ignore */ }
     },

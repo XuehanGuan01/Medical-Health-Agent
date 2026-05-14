@@ -24,8 +24,8 @@
         <span class="card-title">📈 核心指标</span>
         <div class="metric-row" v-for="(v, k) in reportStore.metrics" :key="k">
           <span class="metric-name">{{ labelFor(k) }}</span>
-          <span class="metric-val">{{ v.week_avg?.toFixed(1) || '--' }}</span>
-          <span class="metric-days">{{ v.days || 0 }}天</span>
+          <span class="metric-val">{{ v.week_avg?.toFixed(1) || '--' }} {{ v.unit || '' }}</span>
+          <span class="metric-days">{{ v.days || 0 }} 天</span>
         </div>
       </div>
     </template>
@@ -48,7 +48,7 @@ import { useReportStore } from '@/stores/report'
 const reportStore = useReportStore()
 
 const labelFor = (m) => {
-  const map = { heart_rate: 'Heart Rate', resting_heart_rate: 'Resting HR', heart_rate_variability: 'HRV', step_count: 'Steps', active_energy: 'Active Energy', basal_energy_burned: 'Basal Energy', apple_exercise_time: 'Exercise', apple_stand_time: 'Stand Time', apple_stand_hour: 'Stand Hours', respiratory_rate: 'Respiratory', walking_running_distance: 'Distance', walking_speed: 'Walk Speed', walking_step_length: 'Step Length', walking_asymmetry_percentage: 'Asymmetry', walking_double_support_percentage: 'Dbl Support', walking_heart_rate_average: 'Walk HR Avg', flights_climbed: 'Flights', physical_effort: 'Effort', environmental_audio_exposure: 'Env Noise', headphone_audio_exposure: 'HP Noise', time_in_daylight: 'Daylight', sleep_analysis: 'Sleep', mindful_minutes: 'Mindful', handwashing: 'Handwash', vo2_max: 'VO2 Max', cardio_recovery: 'Cardio Rec', stair_speed_down: 'Stair Down', stair_speed_up: 'Stair Up', running_power: 'Run Power', running_speed: 'Run Speed', running_ground_contact_time: 'Grd Contact', running_vertical_oscillation: 'Vert Osc', running_stride_length: 'Run Stride', cycling_distance: 'Cycling', weight_body_mass: 'Weight', body_fat_percentage: 'Body Fat', body_mass_index: 'BMI', height: 'Height', six_minute_walking_test_distance: '6min Walk', blood_oxygen_saturation: 'SpO2', wrist_temperature: 'Wrist Temp' }
+  const map = { heart_rate: '心率 (Heart Rate)', resting_heart_rate: '静息心率 (Resting HR)', heart_rate_variability: '心率变异性 (HRV)', step_count: '步数 (Steps)', active_energy: '活动能量 (Active Energy)', basal_energy_burned: '基础代谢 (Basal Energy)', apple_exercise_time: '运动时长 (Exercise)', apple_stand_time: '站立时长 (Stand)', apple_stand_hour: '站立小时 (Stand Hr)', respiratory_rate: '呼吸频率 (Respiratory)', walking_running_distance: '步行距离 (Distance)', walking_speed: '步行速度 (Walk Speed)', walking_step_length: '步长 (Step Len)', walking_asymmetry_percentage: '步行不对称 (Asymmetry)', walking_double_support_percentage: '双支撑 (Dbl Support)', walking_heart_rate_average: '步行心率 (Walk HR)', flights_climbed: '爬楼 (Flights)', physical_effort: '身体负荷 (Effort)', environmental_audio_exposure: '环境噪音 (Env Noise)', headphone_audio_exposure: '耳机噪音 (HP Noise)', time_in_daylight: '日照时长 (Daylight)', sleep_analysis: '睡眠 (Sleep)', mindful_minutes: '正念分钟 (Mindful)', handwashing: '洗手 (Handwash)', vo2_max: '最大摄氧量 (VO2 Max)', cardio_recovery: '心率恢复 (Cardio Rec)', stair_speed_down: '下楼梯速度 (Stair Down)', stair_speed_up: '上楼梯速度 (Stair Up)', running_power: '跑步功率 (Run Power)', running_speed: '跑步速度 (Run Speed)', running_ground_contact_time: '触地时间 (Grd Contact)', running_vertical_oscillation: '垂直摆动 (Vert Osc)', running_stride_length: '跑步步幅 (Run Stride)', cycling_distance: '骑行距离 (Cycling)', weight_body_mass: '体重 (Weight)', body_fat_percentage: '体脂率 (Body Fat)', body_mass_index: 'BMI', height: '身高 (Height)', six_minute_walking_test_distance: '6分钟步行 (6min Walk)', blood_oxygen_saturation: '血氧 (SpO2)', wrist_temperature: '手腕温度 (Wrist Temp)' }
   return map[m] || m.replace(/_/g, ' ')
 }
 
@@ -61,7 +61,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.report-page { padding: 16px; min-height: calc(100vh - 56px); background: #f0f2f5; }
+.report-page { padding: 16px; height: calc(100vh - 56px); overflow-y: auto; background: #f0f2f5; -webkit-overflow-scrolling: touch; }
 .page-title { font-size: 22px; font-weight: 700; color: #333; margin-bottom: 12px; display: block; }
 
 .week-tabs { overflow-x: auto; white-space: nowrap; margin-bottom: 16px; }

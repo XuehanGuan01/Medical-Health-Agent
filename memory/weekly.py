@@ -62,10 +62,12 @@ def generate_weekly_report(db: Session, target_monday: date = None) -> dict:
     for metric_type, rows in grouped.items():
         avgs = [r.avg_value for r in rows if r.avg_value is not None]
         totals = [r.total_value for r in rows if r.total_value is not None]
+        unit = rows[0].unit if rows else ""
         summary[metric_type] = {
             "week_avg": round(sum(avgs) / len(avgs), 2) if avgs else None,
             "week_total": round(sum(totals), 2) if totals else None,
             "days": len(rows),
+            "unit": unit,
         }
 
     # LLM 叙事
