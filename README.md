@@ -10,8 +10,8 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
-![[屏幕截图 2026-07-16 150058.png|697]]
-![[屏幕截图 2026-07-16 150132.png|456]]
+![Demo1](ateachments/屏幕截图%202026-07-16%20150058.png)
+![Demo2](ateachments/屏幕截图%202026-07-16%20150132.png)
 ## 项目简介
 
 **Medical-Health-Agent** 是一个个人 AI 健康管家系统。它接收 iPhone Apple Health 的生理数据（39 种指标，覆盖 376 天），结合 **华佗医疗知识库**（27.6 万条 QA）进行 RAG 增强检索，通过 LangGraph 编排多个 Agent 协作，提供健康数据分析与医疗问答服务。前端为 Vue 3 H5 SPA，后端为 FastAPI。

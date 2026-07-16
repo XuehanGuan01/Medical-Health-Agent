@@ -49,3 +49,7 @@ Thumbs.db
 *.bin
 *.pickle
 *.sqlite3
+
+# raw_data
+data/weekly_raw/
+*.json
