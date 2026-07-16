@@ -39,3 +39,14 @@ class WeeklyReport(Base):
     narrative = Column(Text)                             # LLM 叙事全文
     metrics_json = Column(Text)                          # 各项指标 JSON
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class DailyAnalysis(Base):
+    """单日健康分析"""
+    __tablename__ = "daily_analyses"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    target_date = Column(Date, nullable=False, unique=True, index=True)
+    narrative = Column(Text)                             # LLM 叙事全文
+    metrics_json = Column(Text)                          # 当日指标 JSON
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))

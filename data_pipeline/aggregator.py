@@ -11,6 +11,33 @@ from .models import RawHealthSample, DailyMetric
 logger = logging.getLogger("aggregator")
 
 
+def aggregate_date_range(db: Session, start_date: date, end_date: date) -> int:
+    """
+    按日期范围批量执行日聚合（用于手动上传 JSON 后的周批量处理）。
+
+    参数:
+        start_date: 起始日期（含）
+        end_date:   结束日期（含）
+    返回:
+        实际聚合的天数
+    """
+    from datetime import timedelta
+
+    days_done = 0
+    current = start_date
+    while current <= end_date:
+        try:
+            aggregate_daily_metrics(db, current)
+            days_done += 1
+        except Exception as e:
+            logger.error(f"Aggregate failed for {current}: {e}", exc_info=True)
+            raise
+        current += timedelta(days=1)
+
+    logger.info(f"Date-range aggregation completed: {start_date} ~ {end_date} ({days_done} days)")
+    return days_done
+
+
 def aggregate_daily_metrics(db: Session, target_date: date = None):
     """日聚合（增量、幂等）"""
     if target_date is None:

@@ -4,6 +4,9 @@ from langgraph.graph.message import add_messages
 
 
 class AgentState(TypedDict):
+    # ── 会话标识 ──
+    session_id: Optional[str]
+
     # ── 用户输入 ──
     query: str
     messages: Annotated[list, add_messages]

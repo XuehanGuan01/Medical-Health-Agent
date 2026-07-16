@@ -14,6 +14,8 @@ Phase 4 多轮逻辑:
 """
 import logging
 import uuid
+import threading
+import time
 
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage, AIMessage
@@ -27,19 +29,65 @@ from agents.action import action_node, reject_node as reject_node_fn
 
 logger = logging.getLogger("agent.graph")
 
+# ── 进度跟踪（轻量内存存储，session_id → 事件列表）──
+_progress_store: dict[str, list[dict]] = {}
+_progress_lock = threading.Lock()
+PROGRESS_TTL = 120  # 进度数据保留 120 秒后自动清理
+
+
+def _emit_progress(session_id: str, msg: str, stage: str = "info"):
+    """写入一条进度事件"""
+    with _progress_lock:
+        now = time.time()
+        if session_id not in _progress_store:
+            _progress_store[session_id] = []
+        _progress_store[session_id].append({
+            "msg": msg,
+            "stage": stage,
+            "ts": now,
+        })
+        # 清理过期数据
+        stale = [sid for sid, evts in _progress_store.items()
+                 if evts and now - evts[-1]["ts"] > PROGRESS_TTL]
+        for sid in stale:
+            del _progress_store[sid]
+
+
+def get_progress(session_id: str) -> list[dict]:
+    """获取指定 session 的进度事件列表"""
+    with _progress_lock:
+        return list(_progress_store.get(session_id, []))
+
+
+def clear_progress(session_id: str):
+    """清除指定 session 的进度"""
+    with _progress_lock:
+        _progress_store.pop(session_id, None)
+
+
+def _wrap_node(fn, label: str):
+    """为 Agent 节点包裹进度事件发射"""
+    import functools
+    @functools.wraps(fn)
+    def wrapper(state: AgentState) -> dict:
+        sid = state.get("session_id")
+        _emit_progress(sid, label, "process")
+        return fn(state)
+    return wrapper
+
 
 def build_graph() -> StateGraph:
     graph = StateGraph(AgentState)
 
-    # 节点注册
-    graph.add_node("router", router_node)
-    graph.add_node("perception", perception_node)
-    graph.add_node("retrieve", retrieve)
-    graph.add_node("generate", generate)
-    graph.add_node("reflect", reflect)
-    graph.add_node("revise", revise)
+    # 节点注册（包裹进度发射器）
+    graph.add_node("router", _wrap_node(router_node, "识别问题意图"))
+    graph.add_node("perception", _wrap_node(perception_node, "查询健康指标数据"))
+    graph.add_node("retrieve", _wrap_node(retrieve, "检索医疗知识库"))
+    graph.add_node("generate", _wrap_node(generate, "正在深度思考并组织语言"))
+    graph.add_node("reflect", _wrap_node(reflect, "审核校验回答质量"))
+    graph.add_node("revise", _wrap_node(revise, "修正优化回答内容"))
     graph.add_node("reject", reject_node_fn)
-    graph.add_node("action", action_node)
+    graph.add_node("action", _wrap_node(action_node, "生成最终回复"))
 
     graph.set_entry_point("router")
 
@@ -117,6 +165,7 @@ def chat(query: str, session_id: str = None) -> dict:
         }
 
     # ① 注入历史 → state["messages"]
+    _emit_progress(session_id, "加载对话历史", "load")
     messages = _load_history(session_id)
 
     # ② 保存当前 user query
@@ -124,6 +173,7 @@ def chat(query: str, session_id: str = None) -> dict:
 
     # ③ 执行 Graph（Router 仅读 query，不受历史影响）
     initial: AgentState = {
+        "session_id": session_id,
         "query": query,
         "messages": messages,
         "intent": None, "route": None,
@@ -134,9 +184,13 @@ def chat(query: str, session_id: str = None) -> dict:
         "safety_level": "normal",
     }
 
+    _emit_progress(session_id, "正在分析问题意图", "router")
     result = agent_graph.invoke(initial)
 
     # ④ 保存 assistant 回复
+    resp_len = len(result.get("response", ""))
+    _emit_progress(session_id, f"文本就绪，已产出 {resp_len} 字符", "done")
+
     _save_turn(
         session_id, "assistant",
         result.get("response", ""),

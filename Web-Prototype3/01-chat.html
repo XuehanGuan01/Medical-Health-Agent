@@ -1,0 +1,1251 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>对话 · AI 健康管家</title>
+  <style>
+    :root {
+      --bg:      #fafafa;
+      --surface: #ffffff;
+      --fg:      #111111;
+      --muted:   #6b6b6b;
+      --border:  #e5e5e5;
+      --accent:  #2f6feb;
+      --accent-soft: color-mix(in oklch, var(--accent) 14%, transparent);
+      --fg-soft:     color-mix(in oklch, var(--fg) 6%, transparent);
+      --font-display: 'Inter', -apple-system, system-ui, sans-serif;
+      --font-body:    'Inter', -apple-system, 'SF Pro Text', system-ui, sans-serif;
+      --font-mono:    ui-monospace, 'SF Mono', Menlo, monospace;
+      --fs-h1: 22px; --fs-h2: 18px; --fs-h3: 15px; --fs-body: 14px; --fs-meta: 11px;
+      --radius-card: 16px; --radius-sm: 8px; --radius-pill: 999px;
+    }
+    .dark {
+      --bg:      #111111;
+      --surface: #1a1a1a;
+      --fg:      #f0f0f0;
+      --muted:   #999999;
+      --border:  #2a2a2a;
+      --accent:  #5b8ff7;
+      --accent-soft: color-mix(in oklch, var(--accent) 18%, transparent);
+      --fg-soft:     color-mix(in oklch, var(--fg) 8%, transparent);
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body {
+      background: radial-gradient(60% 80% at 50% 0%, color-mix(in oklch, var(--accent) 6%, var(--bg)) 0%, var(--bg) 60%);
+      color: var(--fg); font-family: var(--font-body); font-size: var(--fs-body); line-height: 1.4;
+      -webkit-font-smoothing: antialiased; display: grid; place-items: center; padding: 32px;
+      transition: background 0.3s, color 0.3s;
+    }
+    .stage { display: flex; flex-direction: column; align-items: center; gap: 24px; }
+    .caption { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+    .caption strong { color: var(--fg); font-weight: 500; }
+
+    .device {
+      position: relative; width: 402px; height: 874px; border-radius: 56px; padding: 12px;
+      background: linear-gradient(160deg, #2a2a2c 0%, #1a1a1c 50%, #0e0e10 100%);
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.04) inset, 0 0 0 2px #000 inset, 0 28px 60px -12px rgba(0,0,0,0.45), 0 8px 20px -8px rgba(0,0,0,0.35);
+      isolation: isolate;
+    }
+    .device::before, .device::after {
+      content: ''; position: absolute; width: 3px;
+      background: linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.06) 8%, transparent 16%, transparent 84%, rgba(255,255,255,0.04) 92%, transparent 100%);
+      top: 100px; bottom: 100px; pointer-events: none;
+    }
+    .device::before { left: -1px; } .device::after { right: -1px; }
+    .island { position: absolute; top: 22px; left: 50%; transform: translateX(-50%); width: 126px; height: 36px; background: #000; border-radius: 999px; z-index: 5; }
+    .btn-rail { position: absolute; width: 4px; background: #0a0a0c; border-radius: 2px; }
+    .btn-rail.left-1  { left: -3px; top: 174px; height: 32px; }
+    .btn-rail.left-2  { left: -3px; top: 220px; height: 60px; }
+    .btn-rail.left-3  { left: -3px; top: 290px; height: 60px; }
+    .btn-rail.right-1 { right: -3px; top: 250px; height: 100px; }
+
+    .screen { position: relative; width: 100%; height: 100%; background: var(--bg); color: var(--fg); border-radius: 44px; overflow: hidden; display: flex; flex-direction: column; transition: background 0.3s, color 0.3s; }
+
+    .statusbar {
+      flex: 0 0 47px; padding: 18px 26px 0;
+      display: flex; align-items: flex-start; justify-content: space-between;
+      font-size: 15px; font-weight: 600; letter-spacing: -0.01em;
+    }
+    .statusbar .right { display: inline-flex; align-items: center; gap: 6px; }
+    .statusbar svg { width: 17px; height: 11px; fill: var(--fg); }
+    .statusbar .battery { width: 25px; }
+
+    .home-indicator { flex: 0 0 28px; position: relative; }
+    .home-indicator::after {
+      content: ''; position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+      width: 134px; height: 5px; background: var(--fg); border-radius: 999px; opacity: 0.85;
+    }
+
+    /* Header */
+    .chat-header {
+      flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 16px 8px; gap: 8px;
+    }
+    .chat-header .hdr-btn {
+      font-size: 13px; color: var(--accent); cursor: pointer; padding: 6px 8px;
+      border: 0; background: none; font-family: var(--font-body); white-space: nowrap;
+      border-radius: 8px; transition: background 0.15s; display: inline-flex; align-items: center; gap: 4px;
+    }
+    .chat-header .hdr-btn:active { background: var(--fg-soft); }
+    .chat-header .hdr-btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+    .chat-header .hdr-title {
+      font-family: var(--font-display); font-size: 17px; font-weight: 600;
+      letter-spacing: -0.015em; text-align: center;
+    }
+
+    /* Tab switcher */
+    .tab-switch {
+      flex: 0 0 auto; display: flex; margin: 0 20px 6px;
+      background: var(--fg-soft); border-radius: 999px; padding: 3px; gap: 2px;
+    }
+    .tab-switch button {
+      flex: 1; padding: 7px 0; border: 0; border-radius: 999px;
+      background: transparent; font: inherit; font-size: 13px; font-weight: 500;
+      color: var(--muted); cursor: pointer; transition: all 0.2s;
+    }
+    .tab-switch button.active {
+      background: var(--surface); color: var(--fg);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    /* Content */
+    .content { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
+    .content::-webkit-scrollbar { display: none; }
+    .pad { padding-inline: 20px; }
+    .stack { display: flex; flex-direction: column; gap: 12px; }
+    .row { display: flex; align-items: center; gap: 10px; }
+    .row-between { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+    /* Pills */
+    .pill {
+      display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
+      padding: 6px 12px; background: var(--accent-soft); color: var(--accent);
+      border-radius: 999px; font-family: var(--font-mono); font-size: 10px;
+      letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer;
+      border: 0; transition: background 0.15s;
+    }
+    .pill:active { background: color-mix(in oklch, var(--accent) 24%, transparent); }
+
+    /* Quick-ask scroller */
+    .quick-ask-label {
+      display: block; font-family: var(--font-mono); font-size: 10px;
+      letter-spacing: 0.06em; color: var(--muted); text-transform: uppercase;
+      margin-bottom: 6px; padding-left: 2px;
+    }
+    .quick-ask-track {
+      display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px;
+      -webkit-overflow-scrolling: touch;
+      mask-image: linear-gradient(to left, transparent 0%, black 28px, black 100%);
+      -webkit-mask-image: linear-gradient(to left, transparent 0%, black 28px, black 100%);
+    }
+    .quick-ask-track::-webkit-scrollbar { display: none; }
+
+    .tag {
+      display: inline-flex; flex-shrink: 0; padding: 5px 10px;
+      background: transparent; color: var(--muted); border: 1px solid var(--border);
+      border-radius: 999px; font-size: 12px; cursor: pointer; border: 0;
+    }
+
+    /* Conversation list */
+    .conv-list { padding: 4px 0; }
+    .conv-row {
+      display: grid; grid-template-columns: 38px 1fr auto; align-items: center; gap: 10px;
+      padding: 12px 20px; cursor: pointer; transition: background 0.15s;
+      border-bottom: 1px solid var(--border);
+    }
+    .conv-row:active { background: var(--fg-soft); }
+    .conv-row .avatar {
+      width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center;
+      font-size: 16px; flex-shrink: 0; font-weight: 600;
+    }
+    .conv-row .body .title { font-size: 14px; font-weight: 500; line-height: 1.25; }
+    .conv-row .body .sub   { color: var(--muted); font-size: 12px; line-height: 1.3; margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+    .conv-row .meta { font-family: var(--font-mono); font-size: 10px; color: var(--muted); white-space: nowrap; }
+
+    /* Welcome greeting */
+    .welcome-greeting {
+      text-align: center; padding: 32px 24px 8px;
+    }
+    .welcome-avatar {
+      width: 56px; height: 56px; margin: 0 auto 16px;
+      background: var(--accent-soft); border-radius: 50%;
+      display: grid; place-items: center;
+    }
+    .welcome-avatar svg { width: 32px; height: 32px; }
+    .welcome-title {
+      font-family: var(--font-display); font-size: 18px; font-weight: 600;
+      letter-spacing: -0.015em; color: var(--fg); margin: 0 0 6px;
+    }
+    .welcome-sub {
+      font-size: 14px; color: var(--muted); margin: 0 0 4px; line-height: 1.5;
+    }
+
+    /* Empty state */
+    .empty-state { text-align: center; padding: 60px 20px; }
+    .empty-state .empty-icon { width: 44px; height: 44px; margin: 0 auto 12px; display: block; stroke: var(--muted); fill: none; stroke-width: 1.3; }
+    .empty-state .empty-title { font-size: 16px; font-weight: 500; color: var(--fg); margin-bottom: 4px; }
+    .empty-state .empty-hint { font-size: 13px; color: var(--muted); }
+
+    /* AI Analysis panel */
+    .ai-panel { padding: 8px 20px 16px; }
+    .ai-panel .date-row { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+    .date-display {
+      flex: 1; height: 42px; border: 1px solid var(--border); border-radius: 12px;
+      padding: 0 14px; font: inherit; font-size: 14px; color: var(--fg);
+      background: var(--surface); display: flex; align-items: center; cursor: pointer;
+      transition: border-color 0.15s; gap: 8px;
+    }
+    .date-display:hover { border-color: var(--accent); }
+    .date-display svg { width: 16px; height: 16px; stroke: var(--muted); fill: none; stroke-width: 1.8; flex-shrink: 0; }
+    .date-display .date-text { flex: 1; }
+    .btn-accent {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      width: 100%; min-height: 46px; padding: 12px 20px;
+      background: var(--accent); color: #fff; border: 0; border-radius: 14px;
+      font: inherit; font-size: 15px; font-weight: 600; letter-spacing: -0.005em;
+      cursor: pointer; transition: opacity 0.15s;
+    }
+    .btn-accent:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-accent:active:not(:disabled) { opacity: 0.85; }
+
+    .result-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-card); padding: 16px; margin-top: 14px;
+      font-size: 13px; line-height: 1.65;
+    }
+    .result-card h3 { font-family: var(--font-display); font-size: 16px; margin: 0 0 10px; font-weight: 600; }
+    .result-card p { margin: 0 0 8px; }
+    .result-card .metric-inline { display: inline-flex; align-items: baseline; gap: 4px; padding: 2px 8px; border-radius: 6px; background: var(--fg-soft); font-family: var(--font-mono); font-size: 12px; margin: 0 2px; }
+    .hint-text { font-size: 11px; color: var(--muted); margin-top: 10px; font-family: var(--font-mono); }
+
+    /* ── Conversation chat view ── */
+    .conv-header {
+      display: flex; align-items: center; gap: 8px; padding: 6px 16px 8px;
+    }
+    .conv-back {
+      width: 32px; height: 32px; border-radius: 50%; background: var(--fg-soft);
+      border: 0; display: grid; place-items: center; cursor: pointer; color: var(--fg);
+      flex-shrink: 0;
+    }
+    .conv-back svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
+    .conv-title {
+      font-family: var(--font-display); font-size: 16px; font-weight: 600; letter-spacing: -0.01em;
+      flex: 1; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 32px;
+    }
+    .msg-list { padding: 12px 16px; display: flex; flex-direction: column; gap: 14px; }
+    .msg-row { display: flex; gap: 8px; max-width: 90%; }
+    .msg-row.user { align-self: flex-end; flex-direction: row-reverse; }
+    .msg-row.assistant { align-self: flex-start; }
+    .msg-avatar {
+      width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+      display: grid; place-items: center; font-size: 11px; font-weight: 600; color: #fff;
+    }
+    .msg-bubble {
+      padding: 10px 14px; border-radius: 18px; font-size: 14px; line-height: 1.55;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .msg-row.user .msg-bubble {
+      background: var(--accent); color: #fff; border-bottom-right-radius: 6px;
+    }
+    .msg-row.assistant .msg-bubble {
+      background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 6px;
+    }
+    .msg-row.assistant .msg-bubble h2 { font-family: var(--font-display); font-size: 16px; margin: 0 0 8px; font-weight: 600; }
+    .msg-row.assistant .msg-bubble h3 { font-family: var(--font-display); font-size: 14px; margin: 0 0 4px; font-weight: 600; }
+    .msg-row.assistant .msg-bubble p { margin: 0 0 6px; }
+    .msg-row.assistant .msg-bubble strong { font-weight: 600; }
+    .msg-row.assistant .msg-bubble ul, .msg-row.assistant .msg-bubble ol { margin: 4px 0; padding-left: 18px; }
+    .msg-row.assistant .msg-bubble li { margin-bottom: 2px; }
+    .msg-row.assistant .msg-bubble table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 6px 0; }
+    .msg-row.assistant .msg-bubble th, .msg-row.assistant .msg-bubble td { padding: 4px 8px; border-bottom: 1px solid var(--border); text-align: left; }
+
+    .dot-pulse { display: inline-block; width: 8px; height: 8px; background: var(--accent); border-radius: 50%; animation: pulse 1.2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+
+    /* Input bar */
+    .input-bar {
+      flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+      padding: 8px 16px 10px; background: var(--bg);
+    }
+    .input-bar input {
+      flex: 1; height: 40px; border: 1px solid var(--border); border-radius: 20px;
+      padding: 0 16px; font: inherit; font-size: 14px; color: var(--fg);
+      background: var(--surface); outline: none;
+    }
+    .input-bar input:focus { border-color: var(--accent); }
+    .input-bar .send-btn {
+      width: 40px; height: 40px; border-radius: 50%; background: var(--accent);
+      border: 0; color: #fff; display: grid; place-items: center; cursor: pointer;
+      flex-shrink: 0; transition: opacity 0.15s;
+    }
+    .input-bar .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Session sidebar overlay */
+    .session-overlay {
+      position: absolute; inset: 0; z-index: 20; background: rgba(0,0,0,0.35);
+      opacity: 0; pointer-events: none; transition: opacity 0.25s;
+    }
+    .session-overlay.open { opacity: 1; pointer-events: auto; }
+    .session-panel {
+      position: absolute; left: 0; top: 0; bottom: 0; width: 280px;
+      background: var(--surface); display: flex; flex-direction: column;
+      transform: translateX(-100%); transition: transform 0.25s cubic-bezier(0.2,0,0,1);
+      border-radius: 44px 0 0 44px; overflow: hidden;
+    }
+    .session-overlay.open .session-panel { transform: translateX(0); }
+    .session-panel .panel-header {
+      padding: 60px 18px 14px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .session-panel .panel-title { font-family: var(--font-display); font-size: 18px; font-weight: 600; }
+    .session-panel .panel-close {
+      width: 30px; height: 30px; border-radius: 50%; background: var(--fg-soft);
+      border: 0; display: grid; place-items: center; cursor: pointer; color: var(--muted);
+    }
+    .session-panel .panel-close svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+    .session-panel .session-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+    .session-panel .session-item {
+      display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px;
+      padding: 14px 18px; cursor: pointer; border-bottom: 1px solid var(--fg-soft);
+      transition: background 0.15s;
+    }
+    .session-panel .session-item:active { background: var(--fg-soft); }
+    .session-panel .session-item .sess-title { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .session-panel .session-item .sess-meta { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: var(--font-mono); }
+    .session-panel .session-item .sess-del {
+      width: 24px; height: 24px; border-radius: 50%; border: 0; background: none;
+      color: var(--muted); cursor: pointer; display: grid; place-items: center;
+    }
+    .session-panel .session-item .sess-del:active { color: #dc2626; }
+    .session-panel .session-item .sess-del svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+    .session-panel .empty-sess { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 13px; }
+
+    /* Toast */
+    .toast {
+      position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%);
+      background: var(--fg); color: #fff; padding: 10px 20px; border-radius: 999px;
+      font-size: 13px; z-index: 30; pointer-events: none; opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .toast.show { opacity: 1; }
+
+    /* Tab bar */
+    .tabbar {
+      flex: 0 0 auto; display: grid; grid-template-columns: repeat(4, 1fr);
+      padding: 6px 8px 0; border-top: 1px solid var(--border);
+      background: color-mix(in oklch, var(--surface) 92%, transparent); backdrop-filter: blur(20px);
+    }
+    .tab {
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      padding: 6px 0; color: var(--muted); font-size: 10px; letter-spacing: 0.02em;
+      cursor: pointer; text-decoration: none;
+    }
+    .tab.active { color: var(--accent); }
+    .tab svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+    .tab.active svg { stroke-width: 2; }
+
+    /* ── Calendar Picker Overlay ── */
+    .cal-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.35); z-index: 20; display: none; align-items: center; justify-content: center; border-radius: 44px; }
+    .cal-overlay.show { display: flex; }
+    .cal-overlay-bg { position: absolute; inset: 0; border-radius: 44px; }
+    .cal-picker {
+      position: relative; background: var(--surface); border-radius: 20px; width: calc(100% - 48px);
+      padding: 20px; box-shadow: 0 12px 40px rgba(0,0,0,0.2);
+    }
+    .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .cal-header .month-label { font-family: var(--font-display); font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+    .cal-nav { width: 32px; height: 32px; border-radius: 999px; background: var(--fg-soft); border: 0; display: grid; place-items: center; cursor: pointer; color: var(--fg); }
+    .cal-nav svg { width: 16px; height: 16px; }
+    .cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 11px; color: var(--muted); margin-bottom: 6px; font-family: var(--font-mono); }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+    .cal-cell {
+      aspect-ratio: 1; display: grid; place-items: center; font-size: 14px; font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+      border-radius: 999px; background: transparent; border: 0; color: var(--fg); cursor: pointer; transition: background 150ms;
+    }
+    .cal-cell:hover { background: var(--fg-soft); }
+    .cal-cell.other { color: var(--border); pointer-events: none; }
+    .cal-cell.today { font-weight: 700; color: var(--accent); }
+    .cal-cell.selected { background: var(--accent); color: #fff; font-weight: 600; }
+    .cal-cell.selected.today { color: #fff; }
+    .cal-actions { display: flex; gap: 8px; margin-top: 14px; }
+    .cal-actions button {
+      flex: 1; padding: 8px 0; border-radius: 999px; border: 0; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
+    }
+    .cal-actions .btn-clear { background: transparent; color: var(--accent); }
+    .cal-actions .btn-confirm { background: var(--accent); color: #fff; }
+
+    /* Calendar cell — report dot indicator */
+    .cal-cell.has-report { position: relative; }
+    .cal-cell.has-report::after {
+      content: ''; position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%);
+      width: 5px; height: 5px; border-radius: 50%; background: var(--accent); opacity: 0.7;
+    }
+    .cal-cell.selected.has-report::after { background: #fff; opacity: 0.9; }
+
+    /* ── Report History ── */
+    .report-history { margin-top: 10px; }
+    .report-history-label {
+      display: block; font-family: var(--font-mono); font-size: 10px;
+      letter-spacing: 0.06em; color: var(--muted); text-transform: uppercase;
+      margin-bottom: 6px; padding: 0 2px;
+    }
+    .report-history-list { display: flex; flex-direction: column; gap: 2px; }
+    .report-history-item {
+      display: grid; grid-template-columns: 1fr auto; align-items: center;
+      gap: 10px; padding: 10px 12px; border-radius: 12px; cursor: pointer;
+      transition: background 0.15s; border: 1px solid transparent;
+    }
+    .report-history-item:hover { background: var(--fg-soft); }
+    .report-history-item:active { border-color: var(--border); }
+    .report-history-item .rh-date {
+      font-size: 13px; font-weight: 500; color: var(--fg); line-height: 1.3;
+    }
+    .report-history-item .rh-preview {
+      font-size: 11px; color: var(--muted); line-height: 1.35;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px;
+    }
+    .report-history-item .rh-arrow {
+      color: var(--muted); font-size: 14px; flex-shrink: 0;
+    }
+    .report-history-item .rh-del {
+      width: 28px; height: 28px; border-radius: 50%; border: 0;
+      background: none; color: var(--muted); cursor: pointer;
+      display: grid; place-items: center; flex-shrink: 0;
+      transition: color 0.15s, background 0.15s;
+    }
+    .report-history-item .rh-del:active { color: #dc2626; background: color-mix(in oklch, #dc2626 10%, transparent); }
+    .report-history-item .rh-del svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+    .report-history-empty {
+      text-align: center; padding: 16px; color: var(--muted); font-size: 12px;
+    }
+
+    /* ── Duplicate date warning ── */
+    .warn-banner {
+      display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px;
+      background: color-mix(in oklch, var(--warn, #eab308) 12%, transparent);
+      border: 1px solid color-mix(in oklch, var(--warn, #eab308) 25%, transparent);
+      border-radius: 10px; margin-bottom: 10px; font-size: 12px; color: var(--fg);
+      line-height: 1.5;
+    }
+    .warn-banner svg { width: 16px; height: 16px; stroke: var(--warn, #eab308); fill: none; stroke-width: 2; flex-shrink: 0; margin-top: 1px; }
+    .warn-banner .warn-dismiss {
+      flex-shrink: 0; color: var(--muted); cursor: pointer; font-size: 12px;
+      background: none; border: 0; padding: 0; margin-left: auto;
+    }
+
+    /* View existing report CTA */
+    .btn-view-report {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      width: 100%; min-height: 44px; padding: 10px 20px;
+      background: transparent; color: var(--accent); border: 1.5px solid var(--accent);
+      border-radius: 14px; font: inherit; font-size: 15px; font-weight: 600;
+      letter-spacing: -0.005em; cursor: pointer; transition: background 0.15s; margin-bottom: 8px;
+    }
+    .btn-view-report:active { background: var(--accent-soft); }
+    .btn-view-report svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="caption"><strong>健康管家</strong> · 对话</div>
+
+    <div class="device" data-od-id="device">
+      <span class="btn-rail left-1"  aria-hidden></span>
+      <span class="btn-rail left-2"  aria-hidden></span>
+      <span class="btn-rail left-3"  aria-hidden></span>
+      <span class="btn-rail right-1" aria-hidden></span>
+      <span class="island"           aria-hidden></span>
+
+      <div class="screen" id="screenRoot">
+        <div class="statusbar">
+          <span style="font-family:var(--font-mono);font-variant-numeric:tabular-nums;">9:41</span>
+          <span class="right">
+            <svg viewBox="0 0 17 11" aria-hidden><rect x="0" y="7" width="3" height="4" rx="0.6"/><rect x="4" y="5" width="3" height="6" rx="0.6"/><rect x="8" y="3" width="3" height="8" rx="0.6"/><rect x="12" y="0" width="3" height="11" rx="0.6"/></svg>
+            <svg viewBox="0 0 17 11" aria-hidden><path d="M8.5 1.5C5.5 1.5 2.7 2.6 0.5 4.6L2 6.1C3.8 4.5 6.1 3.6 8.5 3.6c2.4 0 4.7 0.9 6.5 2.5l1.5-1.5c-2.2-2-5-3.1-8-3.1zM3.5 7.6L5 9.1c1-0.9 2.2-1.4 3.5-1.4 1.3 0 2.5 0.5 3.5 1.4l1.5-1.5c-1.4-1.3-3.1-2-5-2-1.9 0-3.6 0.7-5 2zM6.5 10.6l2 2 2-2c-0.5-0.5-1.2-0.8-2-0.8s-1.5 0.3-2 0.8z"/></svg>
+            <svg class="battery" viewBox="0 0 25 11" aria-hidden><rect x="0.5" y="0.5" width="21" height="10" rx="2.5" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="22" y="3.5" width="1.5" height="4" rx="0.4" fill="currentColor" fill-opacity="0.45"/><rect x="2" y="2" width="18" height="7" rx="1.4"/></svg>
+          </span>
+        </div>
+
+        <!-- Header -->
+        <div class="chat-header" data-od-id="header">
+          <button class="hdr-btn" onclick="openSessions()">
+            <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            会话
+          </button>
+          <span class="hdr-title">AI 健康管家</span>
+          <button class="hdr-btn" onclick="newChat()">
+            <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            新对话
+          </button>
+        </div>
+
+        <!-- Tab switcher -->
+        <div class="tab-switch" data-od-id="tab-switch">
+          <button class="active" data-tab="data" onclick="switchTab('data', this)">健康数据</button>
+          <button data-tab="ai" onclick="switchTab('ai', this)">AI 分析</button>
+        </div>
+
+        <!-- Content area -->
+        <main class="content" data-od-id="content">
+
+          <!-- TAB 1: 健康数据 -->
+          <div id="tabData" class="tab-content">
+            <!-- Welcome greeting (default view) -->
+            <section class="welcome-greeting" data-od-id="welcome" id="welcomeView">
+              <div class="welcome-avatar">
+                <svg viewBox="0 0 48 48" style="stroke:var(--accent);fill:none;stroke-width:1.5;">
+                  <circle cx="24" cy="16" r="8"/>
+                  <path d="M10 42c0-7.7 6.3-14 14-14s14 6.3 14 14" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <h2 class="welcome-title">我是您的私人健康顾问</h2>
+              <p class="welcome-sub">可以问我健康问题，或查询今日身体状况</p>
+            </section>
+
+            <!-- Quick actions (default view) -->
+            <section class="pad" data-od-id="quick-actions" id="quickActions">
+              <span class="quick-ask-label">快捷提问</span>
+              <div class="quick-ask-track">
+                <button class="pill" onclick="quickAsk('今日报告')">今日报告</button>
+                <button class="pill" onclick="quickAsk('本周总结')">本周总结</button>
+                <button class="pill" onclick="quickAsk('运动计划')">运动计划</button>
+                <button class="pill" onclick="quickAsk('睡眠分析')">睡眠分析</button>
+                <button class="pill" onclick="quickAsk('心率趋势')">心率趋势</button>
+                <button class="pill" onclick="quickAsk('步数追踪')">步数追踪</button>
+                <button class="pill" onclick="quickAsk('恢复建议')">恢复建议</button>
+                <button class="pill" onclick="quickAsk('健康评分')">健康评分</button>
+                <button class="pill" onclick="quickAsk('VO₂ Max')">VO₂ Max</button>
+                <button class="pill" onclick="quickAsk('HRV 分析')">HRV 分析</button>
+              </div>
+            </section>
+
+            <!-- Conversation chat view (shown when a session is opened) -->
+            <section id="chatView" style="display:none;" data-od-id="chat-view">
+              <div class="conv-header">
+                <button class="conv-back" onclick="closeConversation()">
+                  <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                <span class="conv-title" id="convTitle">会话</span>
+              </div>
+              <div class="msg-list" id="msgList"></div>
+            </section>
+          </div>
+
+          <!-- TAB 2: AI 分析 -->
+          <div id="tabAi" class="tab-content" style="display:none;">
+            <div class="ai-panel" data-od-id="ai-analysis">
+              <div class="date-row">
+                <div class="date-display" onclick="openChatCalendar()" id="chatDateDisplay">
+                  <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  <span class="date-text" id="chatDateText"></span>
+                </div>
+              </div>
+              <div id="dupWarning" style="display:none;"></div>
+              <div id="btnGroup"></div>
+              <p class="hint-text" id="hintGenerate">分析将调用 LLM，请选择目标日期后点击按钮，避免自动消耗 Token。</p>
+              <div id="analysisResult"></div>
+              <div style="display:flex;gap:8px;margin-top:6px;">
+                <button class="btn-view-report" id="btnHistory" onclick="toggleReportHistory()" style="flex:1;margin-bottom:0;">
+                  <svg viewBox="0 0 24 24" width="15" height="15" style="stroke:currentColor;fill:none;stroke-width:2;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  历史报告
+                </button>
+              </div>
+              <div class="report-history" id="reportHistory" style="display:none;">
+                <span class="report-history-label">历史报告</span>
+                <div class="report-history-list" id="reportHistoryList">
+                  <div class="report-history-empty">暂无已生成报告</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </main>
+
+        <!-- Input bar -->
+        <div class="input-bar" data-od-id="chat-input" id="inputBar">
+          <input type="text" id="msgInput" placeholder="输入健康问题…" onkeydown="if(event.key==='Enter')sendMessage()" />
+          <button class="send-btn" id="btnSend" onclick="sendMessage()">
+            <svg viewBox="0 0 24 24" width="15" height="15" style="stroke:currentColor;fill:none;stroke-width:2.5;"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+          </button>
+        </div>
+
+        <!-- Toast -->
+        <div class="toast" id="toast"></div>
+
+        <!-- Session sidebar overlay -->
+        <div class="session-overlay" id="sessionOverlay" onclick="closeSessions(event)">
+          <div class="session-panel" onclick="event.stopPropagation()">
+            <div class="panel-header">
+              <span class="panel-title">历史会话</span>
+              <button class="panel-close" onclick="closeSessions()">
+                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div class="session-list" id="sessionList"></div>
+          </div>
+        </div>
+
+        <!-- Calendar Picker Overlay -->
+        <div class="cal-overlay" id="calOverlay" data-od-id="calendar-overlay">
+          <div class="cal-overlay-bg" id="calOverlayBg"></div>
+          <div class="cal-picker">
+            <div class="cal-header">
+              <button class="cal-nav" id="calPrev" aria-label="上一个月">
+                <svg viewBox="0 0 24 24" style="stroke:currentColor;fill:none;stroke-width:2;"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
+              <span class="month-label" id="calMonthLabel"></span>
+              <button class="cal-nav" id="calNext" aria-label="下一个月">
+                <svg viewBox="0 0 24 24" style="stroke:currentColor;fill:none;stroke-width:2;"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </div>
+            <div class="cal-weekdays">
+              <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+            </div>
+            <div class="cal-grid" id="calGrid"></div>
+            <div class="cal-actions">
+              <button class="btn-clear" id="calClear">回到今天</button>
+              <button class="btn-confirm" id="calConfirm">确定</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom tab bar -->
+        <nav class="tabbar" data-od-id="tabbar">
+          <a class="tab active" href="01-chat.html">
+            <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            对话
+          </a>
+          <a class="tab" href="02-dashboard.html">
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/></svg>
+            看板
+          </a>
+          <a class="tab" href="03-weekly-report.html">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            周报
+          </a>
+          <a class="tab" href="04-settings.html">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+            设置
+          </a>
+        </nav>
+
+        <div class="home-indicator" aria-hidden></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── State ──────────────────────────────────────────────
+    const STORAGE_KEY = 'health_agent_sessions';
+    let currentTab = 'data';
+    let activeSessionId = null; // currently open conversation
+
+    function loadSessions() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+      catch { return []; }
+    }
+    function saveSessions(arr) { localStorage.setItem(STORAGE_KEY, JSON.stringify(arr)); }
+
+    // ── Seed data ──────────────────────────────────────────
+    function seedSessions() {
+      const now = new Date();
+      const fmt = d => d.toISOString();
+      const ago = hrs => { const d = new Date(now); d.setHours(d.getHours() - hrs); return d; };
+      return [
+        { id: 's1', title: '本周健康周报', preview: '你本周心率平均 72 bpm，静息心率稳定在 50 bpm…', lastActive: fmt(ago(0.1)), turns: 2, messages: [
+          { role: 'user', content: '生成本周健康周报' },
+          { role: 'assistant', content: '## 本周健康周报\n\n**心率**: 平均 72 bpm，静息 50 bpm\n**步数**: 日均 8,246 步，较上周 +6%\n**睡眠**: 日均 7h24m，深睡占比 23%\n**HRV**: 均值 38 ms\n\n整体评分: **87** — 良好。建议下周增加有氧运动频次。' }
+        ]},
+        { id: 's2', title: '今日运动建议', preview: '根据你的恢复状态，建议今天进行30分钟低强度有氧…', lastActive: fmt(ago(2)), turns: 2, messages: [
+          { role: 'user', content: '今天适合什么运动？' },
+          { role: 'assistant', content: '根据你的恢复数据：\n- **HRV**: 38 ms（良好）\n- **静息心率**: 50 bpm（正常）\n- **昨日运动**: 45 分钟中等强度\n\n建议今天进行 30 分钟低强度有氧运动：快走、慢跑或骑行。避免高强度训练以促进恢复。' }
+        ]},
+        { id: 's3', title: '昨晚睡眠回顾', preview: '深睡 1h48m，REM 2h12m，整体评分 92 分…', lastActive: fmt(ago(8)), turns: 2, messages: [
+          { role: 'user', content: '昨晚睡得怎么样？' },
+          { role: 'assistant', content: '## 昨晚睡眠回顾\n\n- **总时长**: 7h 42m\n- **深睡**: 1h 48m (23%)\n- **REM**: 2h 12m (29%)\n- **入睡潜伏期**: 14 分钟\n- **睡眠效率**: 92%\n\n整体评分: **92** — 优质睡眠！深睡和 REM 占比均在健康范围。' }
+        ]},
+        { id: 's4', title: '心率异常提醒', preview: '6日下午检测到静息心率偏高，持续约20分钟…', lastActive: fmt(ago(72)), turns: 4, messages: [
+          { role: 'user', content: '6日心率是不是有点异常？' },
+          { role: 'assistant', content: '是的，检测到 **6月6日 14:20–14:40** 静息心率上升至 **78 bpm**（基线 50 bpm），持续约 20 分钟。\n\n可能原因：\n1. 午餐后消化代谢\n2. 短暂情绪波动或压力\n3. 咖啡因摄入\n\n该异常未超过 30 分钟且已恢复正常，暂无需担忧。如果频繁出现，建议记录触发因素。' }
+        ]}
+      ];
+    }
+
+    function initSessions() {
+      let sessions = loadSessions();
+      if (sessions.length === 0) {
+        sessions = seedSessions();
+        saveSessions(sessions);
+      }
+      return sessions;
+    }
+
+    // ── Render conversation list ──────────────────────────
+    function renderConvList() {
+      const sessions = loadSessions();
+      const container = document.getElementById('convList');
+      const emptyEl = document.getElementById('emptyConv');
+
+      if (sessions.length === 0) {
+        container.innerHTML = '';
+        emptyEl.style.display = 'block';
+        return;
+      }
+      emptyEl.style.display = 'none';
+
+      const colors = ['#2f6feb,#5b8ff7', '#17a34a,#22c55e', '#eab308,#f59e0b', '#8b5cf6,#a78bfa', '#dc2626,#ef4444'];
+      const now = new Date();
+
+      const timeAgo = (iso) => {
+        const diff = (now - new Date(iso)) / 1000;
+        if (diff < 60) return '刚刚';
+        if (diff < 3600) return Math.floor(diff / 60) + ' 分钟';
+        if (diff < 86400) return Math.floor(diff / 3600) + ' 小时';
+        if (diff < 604800) return Math.floor(diff / 86400) + ' 天前';
+        return new Date(iso).toLocaleDateString('zh-CN');
+      };
+
+      container.innerHTML = sessions.map((s, i) => {
+        const [g1, g2] = colors[i % colors.length].split(',');
+        return `
+          <div class="conv-row" onclick="openConversation('${s.id}')" data-od-id="conv-${s.id}">
+            <div class="avatar" style="background: linear-gradient(135deg, ${g1}, ${g2}); color: #fff;">${s.title[0]}</div>
+            <div class="body">
+              <div class="title">${escHtml(s.title)}</div>
+              <div class="sub">${escHtml(s.preview)}</div>
+            </div>
+            <span class="meta">${timeAgo(s.lastActive)}</span>
+          </div>`;
+      }).join('');
+    }
+
+    function escHtml(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+    // ── Render session sidebar ───────────────────────────
+    function renderSessionList() {
+      const sessions = loadSessions();
+      const container = document.getElementById('sessionList');
+      if (sessions.length === 0) {
+        container.innerHTML = '<div class="empty-sess">暂无历史会话</div>';
+        return;
+      }
+      container.innerHTML = sessions.map(s => `
+        <div class="session-item" onclick="openConversation('${s.id}'); closeSessions();">
+          <div>
+            <div class="sess-title">${escHtml(s.title)}</div>
+            <div class="sess-meta">${s.turns} 轮对话· ${s.lastActive.slice(0,10)}</div>
+          </div>
+          <button class="sess-del" onclick="event.stopPropagation(); deleteSession('${s.id}')">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      `).join('');
+    }
+
+    // ── Session sidebar ──────────────────────────────────
+    function openSessions() {
+      renderSessionList();
+      document.getElementById('sessionOverlay').classList.add('open');
+    }
+    function closeSessions(e) {
+      if (e && e.target !== document.getElementById('sessionOverlay')) return;
+      document.getElementById('sessionOverlay').classList.remove('open');
+    }
+
+    function deleteSession(sid) {
+      let sessions = loadSessions();
+      sessions = sessions.filter(s => s.id !== sid);
+      saveSessions(sessions);
+      renderSessionList();
+      /* conv list hidden */
+      toast('会话已删除');
+    }
+
+    // ── Tab switching ────────────────────────────────────
+    function switchTab(tab, btn) {
+      currentTab = tab;
+      btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tabData').style.display = tab === 'data' ? 'block' : 'none';
+      document.getElementById('tabAi').style.display = tab === 'ai' ? 'block' : 'none';
+      const input = document.getElementById('msgInput');
+      input.placeholder = tab === 'data' ? '输入健康问题…' : '追问分析结果…';
+      if (tab === 'ai') refreshAiPanel();
+    }
+
+    // ── Quick ask ─────────────────────────────────────────
+    function quickAsk(topic) {
+      const input = document.getElementById('msgInput');
+      input.value = topic;
+      sendMessage();
+    }
+
+    // ── Send message ──────────────────────────────────────
+    function sendMessage() {
+      const input = document.getElementById('msgInput');
+      const text = input.value.trim();
+      if (!text) return;
+
+      let sessions = loadSessions();
+
+      // If a conversation is open, append to it
+      if (activeSessionId) {
+        const session = sessions.find(s => s.id === activeSessionId);
+        if (session) {
+          const reply = generateMockReply(text);
+          session.messages.push({ role: 'user', content: text });
+          session.messages.push({ role: 'assistant', content: reply });
+          session.turns = Math.ceil(session.messages.length / 2);
+          session.lastActive = new Date().toISOString();
+          session.preview = reply.slice(0, 60).replace(/\n/g, ' ') + '…';
+          saveSessions(sessions);
+          input.value = '';
+          renderChatView(activeSessionId); // re-render with new messages
+          return;
+        }
+      }
+
+      // Otherwise create a new session
+      const sid = 's' + Date.now();
+      const now = new Date().toISOString();
+      const reply = generateMockReply(text);
+      const newSession = {
+        id: sid,
+        title: text.length > 20 ? text.slice(0, 20) + '…' : text,
+        preview: reply.slice(0, 60).replace(/\n/g, ' ') + '…',
+        lastActive: now,
+        turns: 1,
+        messages: [
+          { role: 'user', content: text },
+          { role: 'assistant', content: reply }
+        ]
+      };
+
+      sessions.unshift(newSession);
+      if (sessions.length > 50) sessions = sessions.slice(0, 50);
+      saveSessions(sessions);
+
+      input.value = '';
+      toast('消息已发送');
+      document.querySelector('.content').scrollTop = 0;
+    }
+
+    // ── Render chat view for a session ────────────────────
+    function renderChatView(sid) {
+      const sessions = loadSessions();
+      const session = sessions.find(s => s.id === sid);
+      if (!session) return;
+
+      document.getElementById('convTitle').textContent = session.title;
+      const msgList = document.getElementById('msgList');
+      const colors = ['#2f6feb,#5b8ff7', '#17a34a,#22c55e', '#eab308,#f59e0b', '#8b5cf6,#a78bfa', '#dc2626,#ef4444'];
+      const idx = sessions.indexOf(session);
+      const [g1, g2] = colors[idx % colors.length].split(',');
+      const userAvatar = `<div class="msg-avatar" style="background:linear-gradient(135deg,${g1},${g2});">${session.title[0]}</div>`;
+      const aiAvatar = `<div class="msg-avatar" style="background:linear-gradient(135deg,#2f6feb,#5b8ff7);">AI</div>`;
+
+      msgList.innerHTML = session.messages.map(m => {
+        const role = m.role;
+        const avatar = role === 'user' ? userAvatar : aiAvatar;
+        const content = role === 'assistant' ? mdToHtml(m.content) : escHtml(m.content);
+        return `<div class="msg-row ${role}">${avatar}<div class="msg-bubble">${content}</div></div>`;
+      }).join('');
+
+      msgList.scrollTop = msgList.scrollHeight;
+    }
+
+
+
+    function generateMockReply(query) {
+      const q = query.toLowerCase();
+      if (q.includes('报告') || q.includes('今日报告')) return '## 今日健康报告\n\n根据今日同步的 Apple Health 数据：\n\n- **心率**: 72 bpm · 静息 50 bpm\n- **步数**: 8,246 · 活动能量 387 kcal\n- **睡眠**: 昨夜 7h 24m · 深睡占比 23%\n\n整体状态良好，各项指标均在正常范围。';
+      if (q.includes('周总结') || q.includes('本周') || q.includes('周报')) return '## 本周健康周报\n\n**心血管**: 心率均值 71 bpm，静息心率稳定在 51 bpm，HRV 均值 37 ms\n**活动**: 日均 8,432 步，活动能量 402 kcal/天\n**睡眠**: 日均 7h 28m，平均评分 89 分\n\n本周整体评分 **86** — 良好。下周建议增加有氧运动频次。';
+      if (q.includes('运动') || q.includes('锻炼')) return '## 运动建议\n\n基于你的恢复状态（HRV 38ms，静息心率 50bpm）：\n\n推荐: 30 分钟低强度有氧（快走、慢跑、骑行）\n避免: 高强度间歇训练、长时间耐力运动\n\n明日期待你的运动数据更新。';
+      if (q.includes('睡眠')) return '## 睡眠分析\n\n昨晚睡眠数据：\n- 总时长 7h 42m · 深睡 1h 48m · REM 2h 12m\n- 入睡潜伏期 14 分钟 · 效率 92%\n\n评分 **92** — 优质睡眠。深睡占比 23%，REM 占比 29%，均在健康范围。';
+      if (q.includes('心率') && !q.includes('hrv')) return '## 心率概览\n\n- **当前心率**: 72 bpm\n- **静息心率**: 50 bpm（近 7 天均值）\n- **步行心率**: 98 bpm\n- **心率恢复**: 28 bpm（运动后 2 分钟）\n\n心率指标均在正常范围。最近一次异常在 6 月 5 日，短暂上升后已恢复。';
+      if (q.includes('步数') || q.includes('步行')) return '## 步数追踪\n\n- **今日步数**: 8,246 · 目标进度 82%\n- **本周日均**: 8,432 · 较上周 +6%\n- **步行距离**: 5.8 km · 爬楼 12 层\n- **步行速度**: 1.28 m/s · 步长 0.72 m\n\n活跃时间集中在 8:00–9:00 和 17:30–18:30。';
+      if (q.includes('恢复')) return '## 恢复建议\n\n**当前恢复状态**: 良好\n- HRV 38 ms（高于基线 34 ms）\n- 静息心率 50 bpm（低于基线 53 bpm）\n- 睡眠效率 92%\n\n身体恢复充分。建议：\n1. 今天可进行正常强度训练\n2. 保持水分摄入 > 2L\n3. 避免连续两天高强度运动';
+      if (q.includes('hrv') || q.includes('心率变异')) return '## HRV 分析\n\n- **当前 HRV**: 38 ms\n- **7 天均值**: 37 ms\n- **月趋势**: 上升 +3 ms\n- **基线范围**: 32–42 ms\n\nHRV 处于健康区间，呈上升趋势，说明自主神经系统调节能力良好。';
+      if (q.includes('健康评分') || q.includes('评分')) return '## 综合健康评分\n\n**当前评分: 87** — 良好\n\n| 维度 | 得分 | 状态 |\n|------|------|------|\n| 心血管 | 88 | 良好 |\n| 活动 | 82 | 正常 |\n| 睡眠 | 92 | 优秀 |\n| 恢复 | 85 | 良好 |\n| 呼吸 | 89 | 良好 |\n\n各项均衡，睡眠尤为出色。';
+      if (q.includes('vo2') || q.includes('最大摄氧量')) return '## VO₂ Max 分析\n\n- **当前值**: 42.5 ml/kg/min\n- **同龄排名**: 高于 68% 同龄人群\n- **趋势**: 近 3 月上升 +1.8 ml/kg/min\n\n属于「良好」区间。持续有氧训练可进一步提升至 45+ ml/kg/min。';
+      return '## 健康摘要\n\n根据你的同步数据，当前健康状态良好。核心指标（心率、步数、睡眠、活动能量）均在正常范围。\n\n你可以点击上方的快捷提问按钮，或直接输入具体健康问题。也可以切换到「AI 分析」标签，选择日期后生成详细的 AI 健康分析报告。';
+    }
+
+    // ── Open conversation ─────────────────────────────────
+    function openConversation(sid) {
+      const sessions = loadSessions();
+      const session = sessions.find(s => s.id === sid);
+      if (!session) return;
+      session.lastActive = new Date().toISOString();
+      saveSessions(sessions);
+
+      activeSessionId = sid;
+
+      // Switch to the conversation chat view
+      document.getElementById('welcomeView').style.display = 'none';
+      document.getElementById('quickActions').style.display = 'none';
+      document.getElementById('chatView').style.display = 'block';
+      document.getElementById('convTitle').textContent = session.title;
+
+      // Render messages
+      const msgList = document.getElementById('msgList');
+      const colors = ['#2f6feb,#5b8ff7', '#17a34a,#22c55e', '#eab308,#f59e0b', '#8b5cf6,#a78bfa', '#dc2626,#ef4444'];
+      const idx = sessions.indexOf(session);
+      const [g1, g2] = colors[idx % colors.length].split(',');
+
+      const userAvatar = `<div class="msg-avatar" style="background:linear-gradient(135deg,${g1},${g2});">${session.title[0]}</div>`;
+      const aiAvatar = `<div class="msg-avatar" style="background:linear-gradient(135deg,#2f6feb,#5b8ff7);">AI</div>`;
+
+      msgList.innerHTML = session.messages.map(m => {
+        const role = m.role;
+        const avatar = role === 'user' ? userAvatar : aiAvatar;
+        const content = role === 'assistant' ? mdToHtml(m.content) : escHtml(m.content);
+        return `<div class="msg-row ${role}">${avatar}<div class="msg-bubble">${content}</div></div>`;
+      }).join('');
+
+      msgList.scrollTop = msgList.scrollHeight;
+    }
+
+    function closeConversation() {
+      activeSessionId = null;
+      document.getElementById('welcomeView').style.display = '';
+      document.getElementById('quickActions').style.display = '';
+      document.getElementById('chatView').style.display = 'none';
+    }
+
+    // Simple markdown to HTML (handles headings, bold, lists, tables)
+    function mdToHtml(md) {
+      let html = escHtml(md);
+      // Tables
+      html = html.replace(/((?:\|.*\|[\s\S]*?(?=\n\n|$)))/g, (m) => {
+        const rows = m.trim().split('\n').filter(r => r.includes('|'));
+        let table = '<table>';
+        rows.forEach((row, i) => {
+          const cells = row.split('|').filter(c => c.trim() !== '');
+          const tag = i === 0 ? 'th' : 'td';
+          table += '<tr>' + cells.map(c => `<${tag}>${c.trim()}</${tag}>`).join('') + '</tr>';
+        });
+        table += '</table>';
+        return table;
+      });
+      // Headings
+      html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+      html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+      // Bold
+      html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      // List items
+      html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+      html = html.replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>');
+      // Paragraphs (double newline)
+      html = html.replace(/\n\n/g, '</p><p>');
+      html = '<p>' + html + '</p>';
+      // Fix empty paragraphs
+      html = html.replace(/<p>\s*<\/p>/g, '');
+      // Fix <ul> inside <p>
+      html = html.replace(/<p>(<ul>[\s\S]*?<\/ul>)<\/p>/g, '$1');
+      html = html.replace(/<p>(<table>[\s\S]*?<\/table>)<\/p>/g, '$1');
+      html = html.replace(/<p>(<h[23]>[\s\S]*?<\/h[23]>)<\/p>/g, '$1');
+      return html;
+    }
+
+    // ── New chat ──────────────────────────────────────────
+    function newChat() {
+      // Close any active conversation and return to welcome
+      closeConversation();
+      document.getElementById('msgInput').value = '';
+      document.getElementById('msgInput').focus();
+      toast('新对话已就绪');
+    }
+
+    // ── Calendar Picker (shared with AI Analysis) ─────────
+    const calToday    = new Date();
+    let calYear       = calToday.getFullYear();
+    let calMonth      = calToday.getMonth();
+    let calSelected   = new Date(calToday);
+
+    // ── Report history storage ───────────────────────────
+    const REPORT_KEY = 'health_ai_reports';
+    function loadReports() { try { return JSON.parse(localStorage.getItem(REPORT_KEY)) || []; } catch { return []; } }
+    function saveReports(arr) { arr.sort((a,b) => new Date(b.dateStr) - new Date(a.dateStr)); localStorage.setItem(REPORT_KEY, JSON.stringify(arr)); }
+    function hasReport(dateStr) { return loadReports().some(r => r.dateStr === dateStr); }
+    function getReport(dateStr) { return loadReports().find(r => r.dateStr === dateStr) || null; }
+    function addReport(dateStr, html) {
+      const reports = loadReports().filter(r => r.dateStr !== dateStr);
+      reports.push({ dateStr, html, createdAt: new Date().toISOString() });
+      saveReports(reports);
+    }
+
+    function updateDateDisplay() {
+      const weekdays = ['周日','周一','周二','周三','周四','周五','周六'];
+      const d = calSelected;
+      document.getElementById('chatDateText').textContent =
+        `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 · ${weekdays[d.getDay()]}`;
+    }
+
+    function openChatCalendar() {
+      calYear = calSelected.getFullYear();
+      calMonth = calSelected.getMonth();
+      renderCalendar();
+      document.getElementById('calOverlay').classList.add('show');
+    }
+
+    function closeChatCalendar() {
+      document.getElementById('calOverlay').classList.remove('show');
+    }
+
+    document.getElementById('calOverlayBg').addEventListener('click', closeChatCalendar);
+
+    const fmtDate = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+    function renderCalendar() {
+      const label = document.getElementById('calMonthLabel');
+      const grid  = document.getElementById('calGrid');
+      const months = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+      label.textContent = `${calYear}年${months[calMonth]}`;
+
+      const firstDay = new Date(calYear, calMonth, 1).getDay();
+      const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+      const daysInPrev  = new Date(calYear, calMonth, 0).getDate();
+
+      const todayStr = fmtDate(calToday);
+      const selStr   = fmtDate(calSelected);
+
+      let html = '';
+
+      for (let i = firstDay - 1; i >= 0; i--) {
+        const d = daysInPrev - i;
+        html += `<span class="cal-cell other">${d}</span>`;
+      }
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        let cls = 'cal-cell';
+        if (dateStr === todayStr) cls += ' today';
+        if (dateStr === selStr)   cls += ' selected';
+        if (hasReport(dateStr))   cls += ' has-report';
+        html += `<button class="${cls}" data-date="${dateStr}">${d}</button>`;
+      }
+
+      const total = firstDay + daysInMonth;
+      const remaining = total <= 35 ? 35 - total : 42 - total;
+      for (let d = 1; d <= remaining; d++) {
+        html += `<span class="cal-cell other">${d}</span>`;
+      }
+
+      grid.innerHTML = html;
+
+      grid.querySelectorAll('button.cal-cell').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const [cy, cm, cd] = btn.dataset.date.split('-').map(Number);
+          calSelected = new Date(cy, cm - 1, cd);
+          renderCalendar();
+        });
+      });
+    }
+
+    document.getElementById('calPrev').addEventListener('click', () => {
+      calMonth--;
+      if (calMonth < 0) { calMonth = 11; calYear--; }
+      renderCalendar();
+    });
+
+    document.getElementById('calNext').addEventListener('click', () => {
+      calMonth++;
+      if (calMonth > 11) { calMonth = 0; calYear++; }
+      renderCalendar();
+    });
+
+    document.getElementById('calConfirm').addEventListener('click', () => {
+      updateDateDisplay();
+      closeChatCalendar();
+      refreshAiPanel();
+    });
+
+    document.getElementById('calClear').addEventListener('click', () => {
+      calSelected = new Date(calToday);
+      renderCalendar();
+    });
+
+    // ── AI Panel refresh (dup check + button + history) ───
+    function refreshAiPanel() {
+      const dateStr = fmtDate(calSelected);
+      const existing = getReport(dateStr);
+      const dupDiv = document.getElementById('dupWarning');
+      const btnGroup = document.getElementById('btnGroup');
+      const hintEl = document.getElementById('hintGenerate');
+      const resultDiv = document.getElementById('analysisResult');
+
+      // Warning banner
+      if (existing) {
+        dupDiv.style.display = 'block';
+        dupDiv.innerHTML = `<div class="warn-banner">
+          <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span>${calSelected.toLocaleDateString('zh-CN',{month:'long',day:'numeric'})} 已生成过报告，建议直接查看历史报告，避免重复消耗 Token。</span>
+          <button class="warn-dismiss" onclick="document.getElementById('dupWarning').style.display='none'">忽略</button>
+        </div>`;
+        btnGroup.innerHTML = `
+          <button class="btn-view-report" onclick="viewReport('${dateStr}')">
+            <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            查看已有报告
+          </button>
+          <button class="btn-accent" style="margin-bottom:0;background:transparent;color:var(--accent);border:1.5px solid var(--accent);min-height:42px;font-size:14px;" onclick="generateAnalysis()">
+            <svg viewBox="0 0 24 24" width="15" height="15" style="stroke:currentColor;fill:none;stroke-width:2;"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            仍然重新生成
+          </button>`;
+        hintEl.style.display = 'none';
+        // Show existing report in result area
+        resultDiv.innerHTML = existing.html;
+      } else {
+        dupDiv.style.display = 'none';
+        btnGroup.innerHTML = `
+          <button class="btn-accent" id="btnGenerate" onclick="generateAnalysis()">
+            <svg viewBox="0 0 24 24" width="16" height="16" style="stroke:currentColor;fill:none;stroke-width:2;"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            生成分析报告
+          </button>`;
+        hintEl.style.display = 'block';
+      }
+      renderReportHistory();
+    }
+
+    // ── Render report history list ─────────────────────────
+    function renderReportHistory() {
+      const reports = loadReports();
+      const container = document.getElementById('reportHistoryList');
+      if (reports.length === 0) {
+        container.innerHTML = '<div class="report-history-empty">暂无已生成报告</div>';
+        return;
+      }
+      container.innerHTML = reports.slice(0, 20).map(r => {
+        const [dy, dm, dd] = r.dateStr.split('-').map(Number);
+        const d = new Date(dy, dm - 1, dd);
+        const label = d.toLocaleDateString('zh-CN', { month:'long', day:'numeric', weekday:'short' });
+        const preview = stripHtml(r.html).slice(0, 40) + '…';
+        return `<div class="report-history-item" onclick="viewReport('${r.dateStr}'); refreshAiPanel();" data-od-id="report-${r.dateStr}">
+          <div>
+            <div class="rh-date">${label}</div>
+            <div class="rh-preview">${escHtml(preview)}</div>
+          </div>
+          <button class="rh-del" onclick="event.stopPropagation(); deleteReport('${r.dateStr}')" title="删除此报告">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>`;
+      }).join('');
+    }
+
+    function deleteReport(dateStr) {
+      const reports = loadReports().filter(r => r.dateStr !== dateStr);
+      saveReports(reports);
+      renderReportHistory();
+      refreshAiPanel();
+      toast('报告已删除');
+    }
+
+    function stripHtml(html) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      return tmp.textContent || tmp.innerText || '';
+    }
+
+    // ── View existing report ────────────────────────────────
+    function viewReport(dateStr) {
+      const report = getReport(dateStr);
+      if (!report) { toast('未找到该日期的报告'); return; }
+      document.getElementById('analysisResult').innerHTML = report.html;
+      // Also reset calendar to that date for context
+      const [dy, dm, dd] = dateStr.split('-').map(Number);
+      calSelected = new Date(dy, dm - 1, dd);
+      updateDateDisplay();
+      refreshAiPanel();
+      document.getElementById('analysisResult').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // ── Report history toggle ────────────────────────────
+    function toggleReportHistory() {
+      const history = document.getElementById('reportHistory');
+      const btn = document.getElementById('btnHistory');
+      if (history.style.display === 'none') {
+        history.style.display = 'block';
+        btn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" style="stroke:currentColor;fill:none;stroke-width:2;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 关闭历史';
+        renderReportHistory();
+        history.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } else {
+        history.style.display = 'none';
+        btn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" style="stroke:currentColor;fill:none;stroke-width:2;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> 历史报告';
+      }
+    }
+
+    // ── AI Analysis ───────────────────────────────────────
+    function generateAnalysis() {
+      const btnGroup = document.getElementById('btnGroup');
+      // Find the active primary button inside btnGroup
+      const btn = btnGroup.querySelector('.btn-accent') || btnGroup.querySelector('button');
+      const result = document.getElementById('analysisResult');
+      const dateStr = calSelected.toLocaleDateString('zh-CN', { year:'numeric', month:'long', day:'numeric', weekday:'long' });
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="dot-pulse"></span> 分析中…';
+      }
+
+      setTimeout(() => {
+        const cardHtml = `
+          <div class="result-card">
+            <h3>${dateStr} 健康分析</h3>
+            <p>基于你当天同步的 Apple Health 数据，由 AI 生成的综合分析：</p>
+            <p><strong>心血管：</strong> 心率 <span class="metric-inline">72 bpm</span>，静息 <span class="metric-inline">50 bpm</span>，HRV <span class="metric-inline">38 ms</span>。心血管系统运行良好，静息心率处于运动员级别。</p>
+            <p><strong>活动：</strong> 步数 <span class="metric-inline">8,432</span>，活动能量 <span class="metric-inline">412 kcal</span>，运动 <span class="metric-inline">45 分钟</span>。达到每日推荐活动量。</p>
+            <p><strong>恢复：</strong> 睡眠 <span class="metric-inline">7h 42m</span>，深睡占比 23%。身体恢复充分，可维持当前运动强度。</p>
+            <p><strong>建议：</strong> 各项指标正常，继续保持现有生活习惯。下周可尝试将运动时长增加至 50 分钟/天。</p>
+          </div>`;
+        result.innerHTML = cardHtml;
+
+        // Restore button (if btn was found)
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" style="stroke:currentColor;fill:none;stroke-width:2;"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg> 生成分析报告';
+        }
+
+        // Save to history
+        const dateKey = fmtDate(calSelected);
+        addReport(dateKey, cardHtml);
+        refreshAiPanel();
+        toast('报告已生成并保存');
+      }, 2000);
+    }
+
+    // ── Toast ─────────────────────────────────────────────
+    let toastTimer;
+    function toast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove('show'), 1800);
+    }
+
+    // ── Init ──────────────────────────────────────────────
+    // Dark mode sync
+    (function() {
+      const screenEl = document.querySelector('.screen');
+      if (localStorage.getItem('darkMode') === 'on') {
+        screenEl.classList.add('dark');
+      }
+      window.addEventListener('storage', (e) => {
+        if (e.key === 'darkMode') {
+          screenEl.classList.toggle('dark', e.newValue === 'on');
+        }
+      });
+    })();
+
+    function init() {
+      updateDateDisplay();
+      initSessions();
+      refreshAiPanel();
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

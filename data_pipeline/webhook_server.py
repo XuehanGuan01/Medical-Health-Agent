@@ -10,12 +10,13 @@ FastAPI Webhook — 接收 Apple Health 数据 & 提供查询 API。
 """
 import json
 import logging
+import os
 import re
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
 from typing import Optional
 
-from fastapi import FastAPI, Depends, HTTPException, Header, Query
+from fastapi import FastAPI, Depends, HTTPException, Header, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -51,11 +52,13 @@ async def lifespan(app: FastAPI):
     init_memory_db()
     # 周报表放 health.db（与 DailyMetric 同库）
     from data_pipeline.database import engine as health_engine
-    from memory.schema import WeeklyReport
+    from memory.schema import WeeklyReport, DailyAnalysis
     from sqlalchemy import inspect
     if not inspect(health_engine).has_table("weekly_reports"):
         WeeklyReport.__table__.create(bind=health_engine)
-    logger.info("Database initialized successfully (health + memory + weekly_report)")
+    if not inspect(health_engine).has_table("daily_analyses"):
+        DailyAnalysis.__table__.create(bind=health_engine)
+    logger.info("Database initialized successfully (health + memory + weekly_report + daily_analysis)")
     yield
 
 app = FastAPI(
@@ -507,8 +510,24 @@ class ChatRequest(PydanticBaseModel):
 @app.post("/api/v1/chat")
 def chat_endpoint(req: ChatRequest):
     """Phase 4 多轮对话。返回 session_id 用于后续追问。"""
-    from agents.graph import chat as agent_chat
-    return agent_chat(query=req.query, session_id=req.session_id)
+    from agents.graph import chat as agent_chat, clear_progress
+    result = agent_chat(query=req.query, session_id=req.session_id)
+    # 延迟清理：返回结果后保留5秒供前端最后一次拉取进度
+    import threading
+    def _delayed_clear():
+        import time
+        time.sleep(5)
+        clear_progress(result["session_id"])
+    threading.Thread(target=_delayed_clear, daemon=True).start()
+    return result
+
+
+@app.get("/api/v1/chat/progress")
+def get_chat_progress(session_id: str = Query(..., description="会话ID")):
+    """查询对话处理的实时进度事件（前端轮询用）"""
+    from agents.graph import get_progress
+    events = get_progress(session_id)
+    return {"session_id": session_id, "events": events}
 
 
 # ── Phase 4: 对话记忆 ──
@@ -578,6 +597,24 @@ def list_weekly_reports(db: Session = Depends(get_db)):
     return {"reports": list_weekly_reports(db)}
 
 
+@app.api_route("/api/v1/report/weekly", methods=["DELETE"])
+def delete_weekly_report(
+    week_start: str = Query(..., description="周起始日期 YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+):
+    """删除指定周报"""
+    from datetime import date as dt_date
+    from memory.schema import WeeklyReport
+    ws = dt_date.fromisoformat(week_start)
+    row = db.query(WeeklyReport).filter(WeeklyReport.week_start == ws).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="周报不存在")
+    db.delete(row)
+    db.commit()
+    logger.info(f"Weekly report deleted: {week_start}")
+    return {"deleted": week_start}
+
+
 # ── Phase 4: 健康趋势 ──
 
 @app.get("/api/v1/health/trend")
@@ -590,6 +627,238 @@ def get_health_trend(
     """健康指标趋势（day=每日数据点, week=按周聚合）"""
     from memory.trend import get_trend
     return get_trend(db, metric, weeks, granularity)
+
+
+# ============================================================
+# Phase 5+: 手动 JSON 上传
+# ============================================================
+
+@app.post("/api/v1/health/upload")
+def upload_weekly_json(
+    file: UploadFile = File(..., description="Health Auto Export 导出的 JSON 文件"),
+    db: Session = Depends(get_db),
+    _token: str = Depends(verify_api_key),
+):
+    """
+    接收每周 Health Auto Export JSON 文件 → 校验 → 入库 → 聚合 → 存档。
+
+    校验流程:
+      1. 文件名去重（同名 JSON 拒绝导入）
+      2. JSON 格式校验（必须有 data.metrics 字段）
+      3. 全量解析 metrics → 写入 raw_health_samples（事务）
+      4. 触发该周日期范围内每日聚合 → 写入 daily_metrics
+      5. 原始 JSON 存档到 data/weekly_raw/
+
+    全部回滚：任何步骤失败 → raw 写入回滚 + JSON 不存档。
+    """
+    from .upload_handler import (
+        handle_upload,
+        DuplicateError,
+        FormatError,
+        UploadSizeError,
+    )
+
+    if not file.filename or not file.filename.endswith(".json"):
+        raise HTTPException(status_code=400, detail="仅支持 .json 文件")
+
+    try:
+        file_bytes = file.file.read()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"读取文件失败: {e}")
+
+    try:
+        result = handle_upload(
+            file_bytes=file_bytes,
+            filename=file.filename,
+            db=db,
+        )
+    except DuplicateError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except FormatError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except UploadSizeError as e:
+        raise HTTPException(status_code=413, detail=str(e))
+    except Exception as e:
+        logger.error(f"Upload failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"导入失败: {e}")
+
+    return result
+
+
+@app.get("/api/v1/health/upload/list")
+def list_uploaded_files_endpoint(
+    _token: str = Depends(verify_api_key),
+):
+    """查询已导入的周文件列表（扫描 data/weekly_raw/ 目录）"""
+    from .upload_handler import list_uploaded_files
+    files = list_uploaded_files()
+    return {
+        "count": len(files),
+        "directory": os.getenv("WEEKLY_RAW_DIR", "data/weekly_raw"),
+        "files": files,
+    }
+
+
+# ============================================================
+# v4: 单日健康分析
+# ============================================================
+
+DAILY_SYSTEM = """Write a single-day health analysis based on one day of monitoring data.
+
+Output format (in Chinese):
+1. 日期 — 确认分析的日期
+2. 核心指标 — 列出当日心率、步数、能量、睡眠等核心指标（有数据则列具体数值，无数据则标注"当日无数据"）
+3. 日内特征 — 对比个人基线，指出突出或异常的数据点
+4. 简短建议 — 1-2条针对明日的建议
+Keep it under 200 words."""
+
+
+class DailyAnalysisRequest(PydanticBaseModel):
+    date: str  # "YYYY-MM-DD"
+
+
+@app.post("/api/v1/health/daily-analysis")
+def create_daily_analysis(req: DailyAnalysisRequest, db: Session = Depends(get_db)):
+    """
+    生成单日健康分析（非周报）并持久化。
+    接受日期 → 查询该日聚合指标 → LLM 生成分析 → 存入 daily_analyses 表。
+    """
+    from datetime import date as dt_date
+    from dateutil import parser as dt_parser
+    from config.llm import get_action_llm
+    from memory.schema import DailyAnalysis
+
+    try:
+        parsed = dt_parser.parse(req.date)
+        target_date = parsed.strftime("%Y-%m-%d")
+    except Exception:
+        raise HTTPException(status_code=400, detail=f"日期格式错误: {req.date}")
+
+    target = dt_date.fromisoformat(target_date)
+
+    # 查重 — 已存在则直接返回
+    existing = db.query(DailyAnalysis).filter(DailyAnalysis.target_date == target).first()
+    if existing:
+        return {
+            "date": str(existing.target_date),
+            "narrative": existing.narrative,
+            "metrics": json.loads(existing.metrics_json) if existing.metrics_json else {},
+            "created_at": existing.created_at.isoformat() if existing.created_at else None,
+            "cached": True,
+        }
+
+    # 查询当日所有聚合指标
+    rows = (
+        db.query(DailyMetric)
+        .filter(DailyMetric.date == target_date)
+        .all()
+    )
+
+    if not rows:
+        narrative = f"## {target_date} 健康分析\n\n该日期暂无健康数据。请确认已上传并聚合了对应日期的数据。"
+        metrics_json = "{}"
+        data_points = 0
+    else:
+        metrics_summary = {}
+        for r in rows:
+            metrics_summary[r.metric_type] = {
+                "avg": r.avg_value, "min": r.min_value, "max": r.max_value,
+                "total": r.total_value, "samples": r.sample_count, "unit": r.unit,
+            }
+        core_keys = [
+            "heart_rate", "resting_heart_rate", "heart_rate_variability",
+            "step_count", "active_energy", "basal_energy_burned",
+            "sleep_analysis", "respiratory_rate", "walking_running_distance",
+            "apple_exercise_time",
+        ]
+        core = {k: metrics_summary[k] for k in core_keys if k in metrics_summary}
+        core_json = json.dumps(core, ensure_ascii=False, indent=2)
+        metrics_json = json.dumps(metrics_summary, ensure_ascii=False)
+        data_points = len(rows)
+
+        llm = get_action_llm()
+        prompt = f"{DAILY_SYSTEM}\n\nDate: {target_date}\nCore metrics: {core_json}"
+        try:
+            narrative = llm.invoke(prompt).content
+        except Exception as e:
+            logger.error(f"LLM daily analysis failed: {e}")
+            narrative = f"## {target_date} 健康分析\n\nLLM 调用失败，以下为当日原始数据摘要。\n\n请稍后重试。"
+
+    # 持久化
+    record = DailyAnalysis(
+        target_date=target,
+        narrative=narrative,
+        metrics_json=metrics_json,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    return {
+        "date": str(record.target_date),
+        "narrative": record.narrative,
+        "metrics": json.loads(record.metrics_json) if record.metrics_json else {},
+        "data_points": data_points,
+        "created_at": record.created_at.isoformat() if record.created_at else None,
+    }
+
+
+@app.get("/api/v1/health/daily-analysis")
+def get_daily_analysis(
+    date: str = Query(..., description="日期 YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+):
+    """查询某一天的分析报告"""
+    from datetime import date as dt_date
+    from memory.schema import DailyAnalysis
+    target = dt_date.fromisoformat(date)
+    row = db.query(DailyAnalysis).filter(DailyAnalysis.target_date == target).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="该日期的分析报告不存在，请先生成")
+    return {
+        "date": str(row.target_date),
+        "narrative": row.narrative,
+        "metrics": json.loads(row.metrics_json) if row.metrics_json else {},
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+@app.get("/api/v1/health/daily-analysis/list")
+def list_daily_analyses(db: Session = Depends(get_db)):
+    """列出最近 30 份日分析报告"""
+    from memory.schema import DailyAnalysis
+    rows = (
+        db.query(DailyAnalysis)
+        .order_by(DailyAnalysis.target_date.desc())
+        .limit(30)
+        .all()
+    )
+    return {
+        "analyses": [
+            {
+                "date": str(r.target_date),
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
+    }
+
+
+@app.delete("/api/v1/health/daily-analysis")
+def delete_daily_analysis(
+    date: str = Query(..., description="日期 YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+):
+    """删除某一天的日分析报告"""
+    from datetime import date as dt_date
+    from memory.schema import DailyAnalysis
+    target = dt_date.fromisoformat(date)
+    row = db.query(DailyAnalysis).filter(DailyAnalysis.target_date == target).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="该日期的分析报告不存在")
+    db.delete(row)
+    db.commit()
+    return {"deleted": date}
 
 
 # ============================================================

@@ -81,3 +81,9 @@ SLEEP_STAGES = [
 
 # Health Auto Export JSON 顶层包裹键名
 WRAPPER_KEY = "data"
+
+# ── 手动上传 JSON 存档目录 ──────────────────────────────
+WEEKLY_RAW_DIR = os.getenv("WEEKLY_RAW_DIR", "data/weekly_raw")
+
+# ── 上传文件大小限制 ────────────────────────────────────
+MAX_UPLOAD_SIZE_MB = 5  # 单周约76KB，全年~4MB，上限5MB

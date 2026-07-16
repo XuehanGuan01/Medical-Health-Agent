@@ -1,88 +1,155 @@
 <template>
-  <div class="report-page">
-    <span class="page-title">健康周报</span>
-
-    <div class="week-tabs">
-      <div v-for="r in reportStore.reportList" :key="r.week_start"
-           class="week-tab" :class="{ active: reportStore.currentWeek === r.week_start }"
-           @click="reportStore.loadWeek(r.week_start)">
-        <span>{{ r.week_start }} ~ {{ r.week_end }}</span>
-      </div>
+  <div class="page-content rpt-page">
+    <!-- Header -->
+    <div class="rpt-head">
+      <h1 class="rpt-title">健康周报</h1>
+      <button class="pill" :disabled="genning" @click="doGenerate">
+        {{ genning ? '生成中…' : '✨ 生成周报' }}
+      </button>
     </div>
 
-    <div v-if="reportStore.loading" class="loading-box">
-      <span>加载中...</span>
+    <!-- Week chips -->
+    <div class="week-scroll" v-if="weeks.length">
+      <button
+        v-for="w in weeks" :key="w.week_start"
+        class="week-chip" :class="{ active: selWeek === w.week_start }"
+        @click="loadReport(w.week_start)"
+      >{{ w.week_start }} ~ {{ w.week_end }}</button>
     </div>
 
-    <template v-else-if="reportStore.narrative">
-      <div class="card narrative-card">
-        <span class="card-title">📋 本周总览</span>
-        <span class="narrative-text">{{ reportStore.narrative }}</span>
+    <div v-if="!weeks.length" class="empty-state">
+      <div class="empty-icon">📝</div>
+      <div class="empty-title">暂无周报</div>
+      <div class="empty-hint">上传健康数据后可生成周报</div>
+    </div>
+
+    <!-- Report content -->
+    <div v-if="report" class="rpt-body">
+      <!-- Narrative -->
+      <div class="card nar-card">
+        <div v-html="renderMd(report.narrative || '')"></div>
       </div>
 
-      <div class="card metrics-card" v-if="Object.keys(reportStore.metrics).length">
-        <span class="card-title">📈 核心指标</span>
-        <div class="metric-row" v-for="(v, k) in reportStore.metrics" :key="k">
-          <span class="metric-name">{{ labelFor(k) }}</span>
-          <span class="metric-val">{{ v.week_avg?.toFixed(1) || '--' }} {{ v.unit || '' }}</span>
-          <span class="metric-days">{{ v.days || 0 }} 天</span>
+      <!-- Metrics table -->
+      <div class="card tbl-card" v-if="table.length">
+        <div class="tbl-title">📋 本周指标均值</div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>指标</th><th>周均值</th><th>单位</th><th>天数</th></tr></thead>
+            <tbody>
+              <tr v-for="m in table" :key="m.name">
+                <td>{{ labelMap[m.name] || m.name }}</td>
+                <td class="num">{{ m.avg != null ? m.avg.toFixed(1) : '--' }}</td>
+                <td class="unit">{{ m.unit }}</td>
+                <td class="num">{{ m.days }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
-    </template>
 
-    <div v-else class="empty-state">
-      <span class="empty-icon">📝</span>
-      <span class="empty-text">暂无周报，点击下方按钮生成</span>
+      <div class="rpt-meta" v-if="report.week_start">
+        {{ report.week_start }} ~ {{ report.week_end }}
+        <span v-if="report.created_at"> · {{ report.created_at.slice(0,10) }}</span>
+      </div>
     </div>
-
-    <button class="gen-btn" :disabled="reportStore.generating" @click="reportStore.generate()">
-      {{ reportStore.generating ? '生成中...' : '生成本周周报' }}
-    </button>
   </div>
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
-import { useReportStore } from '@/stores/report'
+import { ref, computed, onMounted, inject } from 'vue'
+import { generateReport, getReport, getReportList } from '../../api/report.js'
+import { renderMarkdown } from '../../api/markdown.js'
 
-const reportStore = useReportStore()
+const toast = inject('toast')
 
-const labelFor = (m) => {
-  const map = { heart_rate: '心率 (Heart Rate)', resting_heart_rate: '静息心率 (Resting HR)', heart_rate_variability: '心率变异性 (HRV)', step_count: '步数 (Steps)', active_energy: '活动能量 (Active Energy)', basal_energy_burned: '基础代谢 (Basal Energy)', apple_exercise_time: '运动时长 (Exercise)', apple_stand_time: '站立时长 (Stand)', apple_stand_hour: '站立小时 (Stand Hr)', respiratory_rate: '呼吸频率 (Respiratory)', walking_running_distance: '步行距离 (Distance)', walking_speed: '步行速度 (Walk Speed)', walking_step_length: '步长 (Step Len)', walking_asymmetry_percentage: '步行不对称 (Asymmetry)', walking_double_support_percentage: '双支撑 (Dbl Support)', walking_heart_rate_average: '步行心率 (Walk HR)', flights_climbed: '爬楼 (Flights)', physical_effort: '身体负荷 (Effort)', environmental_audio_exposure: '环境噪音 (Env Noise)', headphone_audio_exposure: '耳机噪音 (HP Noise)', time_in_daylight: '日照时长 (Daylight)', sleep_analysis: '睡眠 (Sleep)', mindful_minutes: '正念分钟 (Mindful)', handwashing: '洗手 (Handwash)', vo2_max: '最大摄氧量 (VO2 Max)', cardio_recovery: '心率恢复 (Cardio Rec)', stair_speed_down: '下楼梯速度 (Stair Down)', stair_speed_up: '上楼梯速度 (Stair Up)', running_power: '跑步功率 (Run Power)', running_speed: '跑步速度 (Run Speed)', running_ground_contact_time: '触地时间 (Grd Contact)', running_vertical_oscillation: '垂直摆动 (Vert Osc)', running_stride_length: '跑步步幅 (Run Stride)', cycling_distance: '骑行距离 (Cycling)', weight_body_mass: '体重 (Weight)', body_fat_percentage: '体脂率 (Body Fat)', body_mass_index: 'BMI', height: '身高 (Height)', six_minute_walking_test_distance: '6分钟步行 (6min Walk)', blood_oxygen_saturation: '血氧 (SpO2)', wrist_temperature: '手腕温度 (Wrist Temp)' }
-  return map[m] || m.replace(/_/g, ' ')
+const weeks = ref([])
+const selWeek = ref(null)
+const report = ref(null)
+const genning = ref(false)
+
+const labelMap = {
+  heart_rate:'心率', resting_heart_rate:'静息心率', heart_rate_variability:'HRV',
+  step_count:'步数', active_energy:'活动能量', basal_energy_burned:'基础代谢',
+  apple_exercise_time:'锻炼时长', apple_stand_time:'站立时间', apple_stand_hour:'站立小时',
+  sleep_analysis:'睡眠', respiratory_rate:'呼吸频率', walking_running_distance:'步行距离',
+  flights_climbed:'爬楼', vo2_max:'VO₂ Max', walking_speed:'步行速度',
+  time_in_daylight:'日照', environmental_audio_exposure:'环境噪音',
+  physical_effort:'体力消耗', cycling_distance:'骑行', walking_heart_rate_average:'步行心率',
+  stair_speed_down:'下楼梯', stair_speed_up:'上楼梯', walking_step_length:'步幅',
+  walking_asymmetry_percentage:'不对称', walking_double_support_percentage:'双支撑',
+  headphone_audio_exposure:'耳机音量', six_minute_walking_test_distance:'6分钟步行',
 }
 
-onMounted(async () => {
-  await reportStore.loadList()
-  if (reportStore.reportList.length > 0) {
-    reportStore.loadWeek(reportStore.reportList[0].week_start)
-  }
+const table = computed(() => {
+  if (!report.value?.metrics) return []
+  return Object.entries(report.value.metrics).map(([k,v]) => ({
+    name: k, avg: v.week_avg, total: v.week_total, unit: v.unit||'', days: v.days||0
+  }))
 })
+
+const renderMd = (t) => renderMarkdown(t)
+
+const loadWeeks = async () => {
+  try {
+    const d = await getReportList()
+    weeks.value = d.reports || []
+  } catch {}
+}
+
+const loadReport = async (ws) => {
+  selWeek.value = ws
+  try { report.value = await getReport(ws) } catch { report.value = null }
+}
+
+const doGenerate = async () => {
+  genning.value = true
+  try {
+    const r = await generateReport()
+    if (r.error) { toast(r.error); return }
+    report.value = r
+    selWeek.value = r.week_start
+    toast('周报已生成')
+    loadWeeks()
+  } catch { toast('生成失败') }
+  finally { genning.value = false }
+}
+
+onMounted(() => loadWeeks())
 </script>
 
 <style scoped>
-.report-page { padding: 16px; height: calc(100vh - 56px); overflow-y: auto; background: #f0f2f5; -webkit-overflow-scrolling: touch; }
-.page-title { font-size: 22px; font-weight: 700; color: #333; margin-bottom: 12px; display: block; }
+.rpt-page { padding: 0 12px 24px; }
 
-.week-tabs { overflow-x: auto; white-space: nowrap; margin-bottom: 16px; }
-.week-tab { display: inline-block; padding: 8px 14px; margin-right: 8px; background: #fff; border-radius: 8px; font-size: 13px; color: #666; }
-.week-tab.active { background: #4A90D9; color: #fff; }
+.rpt-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 4px 12px; }
+.rpt-title { font-family: var(--font-display); font-size: var(--fs-h1); font-weight: 600; letter-spacing: -0.025em; }
 
-.loading-box { text-align: center; padding: 40px; color: #999; }
+.week-scroll { display: flex; gap: 8px; overflow-x: auto; padding: 0 0 12px; -webkit-overflow-scrolling: touch; }
+.week-scroll::-webkit-scrollbar { display: none; }
+.week-chip { flex-shrink: 0; padding: 7px 14px; border-radius: var(--radius-pill); border: 1px solid var(--border); background: var(--surface); font-size: 12px; font-family: var(--font-mono); color: var(--muted); cursor: pointer; }
+.week-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-.card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
-.card-title { font-size: 15px; font-weight: 600; color: #333; margin-bottom: 10px; display: block; }
-.narrative-text { font-size: 14px; line-height: 1.7; color: #444; white-space: pre-line; }
+.rpt-body { display: flex; flex-direction: column; gap: 12px; }
 
-.metric-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f5f5f5; }
-.metric-name { font-size: 14px; color: #666; }
-.metric-val { font-size: 16px; font-weight: 600; color: #333; }
-.metric-days { font-size: 12px; color: #999; }
+.nar-card { padding: 18px; font-size: 14px; line-height: 1.7; }
+.nar-card :deep(h2) { font-family: var(--font-display); font-size: 16px; margin: 0 0 10px; font-weight: 600; }
+.nar-card :deep(h3) { font-family: var(--font-display); font-size: 14px; margin: 0 0 4px; font-weight: 600; }
+.nar-card :deep(p) { margin: 0 0 8px; }
+.nar-card :deep(strong) { font-weight: 600; }
+.nar-card :deep(ul), .nar-card :deep(ol) { margin: 6px 0; padding-left: 20px; }
 
-.empty-state { text-align: center; padding: 80px 20px; }
-.empty-icon { font-size: 48px; }
-.empty-text { display: block; font-size: 14px; color: #999; margin-top: 12px; }
+.tbl-card { padding: 16px; }
+.tbl-title { font-family: var(--font-display); font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+.tbl-wrap { overflow-x: auto; }
+.tbl-wrap table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.tbl-wrap th, .tbl-wrap td { padding: 7px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+.tbl-wrap th { font-weight: 600; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+.tbl-wrap .num { text-align: right; font-family: var(--font-mono); font-size: 12px; }
+.tbl-wrap .unit { text-align: center; color: var(--muted); font-size: 11px; }
 
-.gen-btn { width: 100%; padding: 14px; background: #4A90D9; color: #fff; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; margin-top: 16px; }
-.gen-btn:disabled { background: #b0cee8; }
+.rpt-meta { text-align: center; padding: 8px 0 16px; font-size: var(--fs-meta); color: var(--muted); }
+
+.empty-state { text-align: center; padding: 60px 20px; }
+.empty-title { font-size: 16px; font-weight: 500; margin-bottom: 4px; }
+.empty-hint { font-size: 13px; color: var(--muted); }
 </style>

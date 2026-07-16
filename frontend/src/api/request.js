@@ -20,11 +20,14 @@ const request = async (url, options = {}) => {
   const timer = setTimeout(() => controller.abort(), TIMEOUT)
 
   try {
+    const hasBody = method !== 'GET' && method !== 'DELETE' && options.data
+    const headers = { ...options.header }
+    if (hasBody) headers['Content-Type'] = 'application/json'
+
     const res = await fetch(fullURL, {
       method,
-      headers: { 'Content-Type': 'application/json', ...options.header },
-      body: (method !== 'GET' && method !== 'DELETE' && options.data)
-        ? JSON.stringify(options.data) : undefined,
+      headers,
+      body: hasBody ? JSON.stringify(options.data) : undefined,
       signal: controller.signal,
     })
     clearTimeout(timer)

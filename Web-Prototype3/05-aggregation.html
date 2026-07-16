@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>数据聚合 · AI 健康管家</title>
+  <style>
+    :root {
+      --bg:      #fafafa;
+      --surface: #ffffff;
+      --fg:      #111111;
+      --muted:   #6b6b6b;
+      --border:  #e5e5e5;
+      --accent:  #2f6feb;
+      --accent-soft: color-mix(in oklch, var(--accent) 14%, transparent);
+      --fg-soft:     color-mix(in oklch, var(--fg) 6%, transparent);
+      --font-display: 'Inter', -apple-system, system-ui, sans-serif;
+      --font-body:    'Inter', -apple-system, 'SF Pro Text', system-ui, sans-serif;
+      --font-mono:    ui-monospace, 'SF Mono', Menlo, monospace;
+      --fs-h1: 24px; --fs-h2: 18px; --fs-h3: 15px; --fs-body: 14px; --fs-meta: 11px;
+      --radius-card: 16px; --radius-sm: 8px; --radius-pill: 999px;
+    }
+    .dark {
+      --bg:      #111111;
+      --surface: #1a1a1a;
+      --fg:      #f0f0f0;
+      --muted:   #999999;
+      --border:  #2a2a2a;
+      --accent:  #5b8ff7;
+      --accent-soft: color-mix(in oklch, var(--accent) 18%, transparent);
+      --fg-soft:     color-mix(in oklch, var(--fg) 8%, transparent);
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body {
+      background: radial-gradient(60% 80% at 50% 0%, color-mix(in oklch, var(--accent) 6%, var(--bg)) 0%, var(--bg) 60%);
+      color: var(--fg); font-family: var(--font-body); font-size: var(--fs-body); line-height: 1.4;
+      -webkit-font-smoothing: antialiased; display: grid; place-items: center; padding: 32px;
+      transition: background 0.3s, color 0.3s;
+    }
+    .stage { display: flex; flex-direction: column; align-items: center; gap: 24px; }
+    .caption { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+    .caption strong { color: var(--fg); font-weight: 500; }
+
+    .device {
+      position: relative; width: 402px; height: 874px; border-radius: 56px; padding: 12px;
+      background: linear-gradient(160deg, #2a2a2c 0%, #1a1a1c 50%, #0e0e10 100%);
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.04) inset, 0 0 0 2px #000 inset, 0 28px 60px -12px rgba(0,0,0,0.45), 0 8px 20px -8px rgba(0,0,0,0.35);
+      isolation: isolate;
+    }
+    .device::before, .device::after {
+      content: ''; position: absolute; width: 3px;
+      background: linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.06) 8%, transparent 16%, transparent 84%, rgba(255,255,255,0.04) 92%, transparent 100%);
+      top: 100px; bottom: 100px; pointer-events: none;
+    }
+    .device::before { left: -1px; } .device::after { right: -1px; }
+    .island { position: absolute; top: 22px; left: 50%; transform: translateX(-50%); width: 126px; height: 36px; background: #000; border-radius: 999px; z-index: 5; }
+    .btn-rail { position: absolute; width: 4px; background: #0a0a0c; border-radius: 2px; }
+    .btn-rail.left-1  { left: -3px; top: 174px; height: 32px; }
+    .btn-rail.left-2  { left: -3px; top: 220px; height: 60px; }
+    .btn-rail.left-3  { left: -3px; top: 290px; height: 60px; }
+    .btn-rail.right-1 { right: -3px; top: 250px; height: 100px; }
+
+    .screen { position: relative; width: 100%; height: 100%; background: var(--bg); color: var(--fg); border-radius: 44px; overflow: hidden; display: flex; flex-direction: column; transition: background 0.3s, color 0.3s; }
+
+    .statusbar {
+      flex: 0 0 47px; padding: 18px 26px 0;
+      display: flex; align-items: flex-start; justify-content: space-between;
+      font-size: 15px; font-weight: 600; letter-spacing: -0.01em;
+      transition: color 0.3s;
+    }
+    .statusbar .right { display: inline-flex; align-items: center; gap: 6px; }
+    .statusbar svg { width: 17px; height: 11px; fill: var(--fg); transition: fill 0.3s; }
+    .statusbar .battery { width: 25px; }
+
+    .content { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding: 8px 0 28px; }
+    .content::-webkit-scrollbar { display: none; }
+
+    .home-indicator { flex: 0 0 28px; position: relative; }
+    .home-indicator::after {
+      content: ''; position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+      width: 134px; height: 5px; background: var(--fg); border-radius: 999px; opacity: 0.85;
+      transition: background 0.3s;
+    }
+
+    .pad     { padding-inline: 20px; }
+    .stack   { display: flex; flex-direction: column; gap: 12px; }
+    .row     { display: flex; align-items: center; gap: 10px; }
+    .row-between { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+    .back-link {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-family: var(--font-body); font-size: 15px; color: var(--accent);
+      text-decoration: none; padding: 4px 20px; margin-bottom: 4px;
+    }
+    .back-link svg { width: 18px; height: 18px; stroke: var(--accent); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    .header { padding: 4px 20px 8px; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+    .header h1 { font-family: var(--font-display); font-size: var(--fs-h1); letter-spacing: -0.02em; line-height: 1.1; margin: 0; font-weight: 600; }
+    .greeting { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 2px; }
+
+    /* Drop zone */
+    .drop-zone {
+      background: var(--surface); border: 2px dashed var(--border);
+      border-radius: var(--radius-card); padding: 32px 20px;
+      text-align: center; transition: border-color 0.2s, background 0.2s;
+      cursor: pointer; position: relative;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--accent);
+      background: color-mix(in oklch, var(--accent) 4%, var(--surface));
+    }
+    .drop-zone .icon-circle {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: var(--accent-soft);
+      display: grid; place-items: center;
+      margin: 0 auto 14px;
+    }
+    .drop-zone .icon-circle svg {
+      width: 26px; height: 26px; stroke: var(--accent); fill: none;
+      stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
+    }
+    .drop-zone .label   { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
+    .drop-zone .hint    { font-size: 12px; color: var(--muted); }
+    .drop-zone .formats { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: var(--muted); margin-top: 10px; }
+
+    /* File list */
+    .file-list { display: flex; flex-direction: column; gap: 8px; }
+    .file-item {
+      display: flex; align-items: center; gap: 12px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px 14px;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .file-item .file-icon {
+      width: 38px; height: 38px; border-radius: 8px;
+      background: var(--fg-soft);
+      display: grid; place-items: center; flex-shrink: 0;
+    }
+    .file-item .file-icon svg { width: 18px; height: 18px; stroke: var(--fg); fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    .file-item .file-info { flex: 1; min-width: 0; }
+    .file-item .file-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .file-item .file-meta { font-family: var(--font-mono); font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .file-item .file-status { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 999px; flex-shrink: 0; }
+    .file-item .file-status.ready { background: color-mix(in oklch, #17a34a 14%, transparent); color: #17a34a; }
+    .file-item .file-status.error { background: color-mix(in oklch, #dc2626 14%, transparent); color: #dc2626; }
+
+    .file-item .remove-btn {
+      width: 28px; height: 28px; border-radius: 50%;
+      border: none; background: var(--fg-soft);
+      display: grid; place-items: center; cursor: pointer; flex-shrink: 0;
+      color: var(--muted); font-size: 16px; line-height: 1;
+    }
+
+    /* Section label */
+    .section-label {
+      font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--muted); padding: 0 20px; margin-bottom: 6px; margin-top: 14px;
+    }
+
+    /* Primary button */
+    .btn-primary {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%; min-height: 48px; padding: 14px 20px;
+      background: var(--accent); color: #fff; border: none; border-radius: 14px;
+      font: inherit; font-size: 16px; font-weight: 600; cursor: pointer;
+      transition: background 0.2s, opacity 0.2s, transform 0.1s;
+    }
+    .btn-primary:active { transform: scale(0.98); }
+    .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary svg { width: 20px; height: 20px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* Progress */
+    .progress-section { display: none; }
+    .progress-section.active { display: block; }
+    .progress-bar-track {
+      height: 6px; background: var(--border); border-radius: 999px; overflow: hidden;
+      margin: 14px 0 8px;
+    }
+    .progress-bar-fill {
+      height: 100%; background: var(--accent); border-radius: 999px;
+      width: 0%; transition: width 0.4s ease;
+    }
+    .progress-text { font-family: var(--font-mono); font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; }
+
+    /* Result */
+    .result-section { display: none; }
+    .result-section.active { display: block; }
+    .result-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-card); padding: 16px;
+    }
+    .result-stat {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .result-stat:last-child { border-bottom: none; }
+    .result-stat .stat-label { font-size: 14px; color: var(--muted); }
+    .result-stat .stat-value { font-family: var(--font-mono); font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+    .result-status {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px; border-radius: 999px;
+      font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em;
+      margin-bottom: 12px;
+    }
+    .result-status.success { background: color-mix(in oklch, #17a34a 12%, transparent); color: #17a34a; }
+    .result-status.running { background: color-mix(in oklch, var(--accent) 12%, transparent); color: var(--accent); }
+    .result-status.failed  { background: color-mix(in oklch, #dc2626 12%, transparent); color: #dc2626; }
+
+    .tabbar {
+      flex: 0 0 auto; display: grid; grid-template-columns: repeat(4, 1fr);
+      padding: 6px 8px 0; border-top: 1px solid var(--border);
+      background: color-mix(in oklch, var(--surface) 92%, transparent); backdrop-filter: blur(20px);
+      transition: background 0.3s, border-color 0.3s;
+    }
+    .tab {
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      padding: 6px 0; color: var(--muted); font-size: 10px; letter-spacing: 0.02em;
+      cursor: pointer; text-decoration: none;
+    }
+    .tab.active { color: var(--accent); }
+    .tab svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+    .tab.active svg { stroke-width: 2; }
+
+    /* Toast */
+    .toast {
+      position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+      background: var(--fg); color: var(--bg); padding: 10px 20px;
+      border-radius: 999px; font-size: 13px; font-weight: 500;
+      z-index: 10; pointer-events: none; opacity: 0; transition: opacity 0.35s;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="caption"><strong>健康管家</strong> · 数据聚合</div>
+
+    <div class="device" data-od-id="device">
+      <span class="btn-rail left-1"  aria-hidden></span>
+      <span class="btn-rail left-2"  aria-hidden></span>
+      <span class="btn-rail left-3"  aria-hidden></span>
+      <span class="btn-rail right-1" aria-hidden></span>
+      <span class="island"           aria-hidden></span>
+
+      <div class="screen" id="screenRoot">
+        <div class="statusbar">
+          <span style="font-family: ui-monospace, 'SF Mono', monospace;">9:41</span>
+          <span class="right">
+            <svg viewBox="0 0 17 11" aria-hidden><rect x="0" y="7" width="3" height="4" rx="0.6"/><rect x="4" y="5" width="3" height="6" rx="0.6"/><rect x="8" y="3" width="3" height="8" rx="0.6"/><rect x="12" y="0" width="3" height="11" rx="0.6"/></svg>
+            <svg viewBox="0 0 17 11" aria-hidden><path d="M8.5 1.5C5.5 1.5 2.7 2.6 0.5 4.6L2 6.1C3.8 4.5 6.1 3.6 8.5 3.6c2.4 0 4.7 0.9 6.5 2.5l1.5-1.5c-2.2-2-5-3.1-8-3.1zM3.5 7.6L5 9.1c1-0.9 2.2-1.4 3.5-1.4 1.3 0 2.5 0.5 3.5 1.4l1.5-1.5c-1.4-1.3-3.1-2-5-2-1.9 0-3.6 0.7-5 2zM6.5 10.6l2 2 2-2c-0.5-0.5-1.2-0.8-2-0.8s-1.5 0.3-2 0.8z"/></svg>
+            <svg class="battery" viewBox="0 0 25 11" aria-hidden><rect x="0.5" y="0.5" width="21" height="10" rx="2.5" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="22" y="3.5" width="1.5" height="4" rx="0.4" fill="currentColor" fill-opacity="0.45"/><rect x="2" y="2" width="18" height="7" rx="1.4"/></svg>
+          </span>
+        </div>
+
+        <main class="content" data-od-id="content">
+          <a class="back-link" href="04-settings.html">
+            <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+            返回设置
+          </a>
+
+          <div class="header" data-od-id="header">
+            <div>
+              <p class="greeting">数据管理</p>
+              <h1>数据聚合</h1>
+            </div>
+          </div>
+
+          <!-- 上传区域 -->
+          <section class="pad" data-od-id="upload-zone" style="margin-top: 6px;">
+            <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+              <div class="icon-circle">
+                <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              </div>
+              <div class="label">点击或拖拽上传健康数据</div>
+              <div class="hint">仅支持 JSON 格式健康数据文件</div>
+              <div class="formats">.json</div>
+            </div>
+            <input type="file" id="fileInput" accept=".json" multiple hidden onchange="handleFiles(this.files)" />
+          </section>
+
+          <!-- 已上传文件列表 -->
+          <section class="pad" data-od-id="file-list" style="margin-top: 16px;" id="fileListSection">
+            <p class="section-label" style="padding:0;">已上传 (0)</p>
+            <div class="file-list" id="fileList"></div>
+          </section>
+
+          <!-- 聚合操作 -->
+          <section class="pad" data-od-id="aggregation-action" style="margin-top: 16px;">
+            <button class="btn-primary" id="aggregateBtn" disabled onclick="startAggregation()">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>
+              开始聚合
+            </button>
+
+            <!-- 进度区域 -->
+            <div class="progress-section" id="progressSection" style="margin-top: 16px;">
+              <div class="result-status running" id="progressStatus">
+                <svg width="14" height="14" viewBox="0 0 24 24" style="stroke: var(--accent); fill: none; stroke-width: 2;" id="spinnerIcon"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                <span id="progressLabel">正在解析数据…</span>
+              </div>
+              <div class="progress-bar-track">
+                <div class="progress-bar-fill" id="progressBar"></div>
+              </div>
+              <div class="progress-text">
+                <span id="progressStep">步骤 1 / 4</span>
+                <span id="progressPct">0%</span>
+              </div>
+            </div>
+          </section>
+
+          <!-- 聚合结果 -->
+          <section class="pad" data-od-id="aggregation-result" style="margin-top: 16px;">
+            <div class="result-section" id="resultSection">
+              <p class="section-label" style="padding:0;">聚合结果</p>
+              <div class="result-card" id="resultCard">
+                <div class="result-status" id="resultStatus"></div>
+                <div class="result-stat">
+                  <span class="stat-label">聚合周数</span>
+                  <span class="stat-value" id="resultWeeks">—</span>
+                </div>
+                <div class="result-stat">
+                  <span class="stat-label">原始记录</span>
+                  <span class="stat-value" id="resultRecords">—</span>
+                </div>
+                <div class="result-stat">
+                  <span class="stat-label">聚合指标</span>
+                  <span class="stat-value" id="resultMetrics">—</span>
+                </div>
+                <div class="result-stat">
+                  <span class="stat-label">输出文件</span>
+                  <span class="stat-value" id="resultFile">—</span>
+                </div>
+              </div>
+              <button class="btn-primary" style="margin-top: 12px; background: var(--surface); color: var(--accent); border: 1px solid var(--accent);" id="downloadBtn" onclick="simulateDownload()" disabled>
+                <svg viewBox="0 0 24 24" style="stroke: var(--accent);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                下载聚合结果
+              </button>
+            </div>
+          </section>
+        </main>
+
+        <nav class="tabbar" data-od-id="tabbar">
+          <a class="tab" href="01-chat.html">
+            <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            对话
+          </a>
+          <a class="tab" href="02-dashboard.html">
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/></svg>
+            看板
+          </a>
+          <a class="tab" href="03-weekly-report.html">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            周报
+          </a>
+          <a class="tab active" href="04-settings.html">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+            设置
+          </a>
+        </nav>
+
+        <div class="home-indicator" aria-hidden></div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <script>
+    // ── State ──
+    const files = [];
+    const MAX_FILES = 10;
+    const MAX_SIZE = 50 * 1024 * 1024; // 50 MB
+
+    // ── Dark mode ──
+    (function() {
+      const screenEl = document.getElementById('screenRoot');
+      if (localStorage.getItem('darkMode') === 'on') {
+        screenEl.classList.add('dark');
+      }
+      window.addEventListener('storage', (e) => {
+        if (e.key === 'darkMode') {
+          screenEl.classList.toggle('dark', e.newValue === 'on');
+        }
+      });
+    })();
+
+    // ── File handling ──
+    function handleFiles(fileList) {
+      for (const f of fileList) {
+        if (files.length >= MAX_FILES) { showToast('最多上传 10 个文件'); break; }
+        if (f.size > MAX_SIZE) { showToast(`"${f.name}" 超过 50MB 上限`); continue; }
+        const ext = f.name.split('.').pop().toLowerCase();
+        if (ext !== 'json') {
+          showToast(`"${f.name}" 仅支持 JSON 格式`);
+          continue;
+        }
+        files.push({
+          name: f.name,
+          size: f.size,
+          ext: ext,
+          added: new Date().toLocaleString('zh-CN'),
+          status: 'ready'
+        });
+      }
+      renderFileList();
+      updateAggregateBtn();
+      document.getElementById('fileInput').value = '';
+    }
+
+    function removeFile(idx) {
+      files.splice(idx, 1);
+      // Reset result if files changed
+      resetResult();
+      renderFileList();
+      updateAggregateBtn();
+    }
+
+    function renderFileList() {
+      const list = document.getElementById('fileList');
+      const section = document.getElementById('fileListSection');
+      const label = section.querySelector('.section-label');
+
+      label.textContent = `已上传 (${files.length})`;
+      section.style.display = files.length > 0 ? 'block' : 'none';
+
+      if (files.length === 0) {
+        list.innerHTML = '';
+        return;
+      }
+
+      list.innerHTML = files.map((f, i) => `
+        <div class="file-item">
+          <div class="file-icon">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </div>
+          <div class="file-info">
+            <div class="file-name">${f.name}</div>
+            <div class="file-meta">${formatSize(f.size)} · ${f.added}</div>
+          </div>
+          <span class="file-status ready">就绪</span>
+          <button class="remove-btn" onclick="event.stopPropagation(); removeFile(${i})" title="移除">×</button>
+        </div>
+      `).join('');
+    }
+
+    function formatSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / 1048576).toFixed(1) + ' MB';
+    }
+
+    function updateAggregateBtn() {
+      document.getElementById('aggregateBtn').disabled = files.length === 0;
+    }
+
+    function resetResult() {
+      document.getElementById('resultSection').classList.remove('active');
+      document.getElementById('progressSection').classList.remove('active');
+      document.getElementById('downloadBtn').disabled = true;
+    }
+
+    // ── Aggregation ──
+    async function startAggregation() {
+      if (files.length === 0) return;
+
+      const btn = document.getElementById('aggregateBtn');
+      btn.disabled = true;
+      btn.textContent = '聚合中…';
+
+      // Show progress
+      const progress = document.getElementById('progressSection');
+      const result = document.getElementById('resultSection');
+      progress.classList.add('active');
+      result.classList.remove('active');
+
+      const steps = [
+        { label: '正在解析数据…',  pct: 15, step: '步骤 1 / 4' },
+        { label: '正在清洗异常值…', pct: 40, step: '步骤 2 / 4' },
+        { label: '正在生成周期聚合…', pct: 70, step: '步骤 3 / 4' },
+        { label: '正在输出结果文件…', pct: 95, step: '步骤 4 / 4' },
+      ];
+
+      for (const s of steps) {
+        await sleep(800 + Math.random() * 600);
+        document.getElementById('progressLabel').textContent = s.label;
+        document.getElementById('progressBar').style.width = s.pct + '%';
+        document.getElementById('progressStep').textContent = s.step;
+        document.getElementById('progressPct').textContent = s.pct + '%';
+      }
+
+      // Complete
+      await sleep(400);
+      document.getElementById('progressBar').style.width = '100%';
+      document.getElementById('progressPct').textContent = '100%';
+      document.getElementById('progressLabel').textContent = '聚合完成';
+      document.getElementById('progressStep').textContent = '已完成';
+
+      // Show result
+      const totalRecords = files.reduce((sum, f) => sum + Math.floor(f.size / 120), 0);
+      const weeks = Math.max(1, Math.floor(totalRecords / 2000));
+      const metrics = 26; // all 26 health metrics
+
+      setTimeout(() => {
+        document.getElementById('resultStatus').className = 'result-status success';
+        document.getElementById('resultStatus').textContent = '✓ 聚合成功';
+        document.getElementById('resultWeeks').textContent = weeks + ' 周';
+        document.getElementById('resultRecords').textContent = totalRecords.toLocaleString() + ' 条';
+        document.getElementById('resultMetrics').textContent = metrics + ' 项';
+        document.getElementById('resultFile').textContent = 'health_weekly_aggregated_' + todayStr() + '.json';
+        document.getElementById('resultSection').classList.add('active');
+        document.getElementById('downloadBtn').disabled = false;
+
+        btn.textContent = '重新聚合';
+        btn.disabled = false;
+      }, 300);
+
+      // Save aggregation record to localStorage
+      saveAggHistory(weeks, totalRecords, metrics);
+    }
+
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+    function todayStr() {
+      const d = new Date();
+      return d.getFullYear() + ('0'+(d.getMonth()+1)).slice(-2) + ('0'+d.getDate()).slice(-2);
+    }
+
+    function saveAggHistory(weeks, records, metrics) {
+      const h = JSON.parse(localStorage.getItem('aggHistory') || '[]');
+      h.unshift({ time: new Date().toISOString(), weeks, records, metrics, files: files.map(f => f.name) });
+      if (h.length > 20) h.length = 20;
+      localStorage.setItem('aggHistory', JSON.stringify(h));
+    }
+
+    function simulateDownload() {
+      showToast('聚合结果已加入下载队列');
+    }
+
+    // ── Drag & drop ──
+    const dropZone = document.getElementById('dropZone');
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      handleFiles(e.dataTransfer.files);
+    });
+
+    // ── Toast ──
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(t._tid);
+      t._tid = setTimeout(() => t.classList.remove('show'), 2000);
+    }
+  </script>
+</body>
+</html>
