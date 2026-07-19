@@ -59,10 +59,36 @@
               <div class="fi-meta">{{ fmtSize(f.size_bytes) }} · {{ fmtTime(f.imported_at) }}</div>
             </div>
           </div>
+          <button class="fi-del" @click="confirmDelete(f.filename)" title="删除此文件">×</button>
         </div>
       </div>
       <div v-else class="card" style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">暂无已导入文件</div>
     </div>
+
+    <!-- 删除确认弹窗 -->
+    <teleport to="body">
+      <div v-if="showConfirm" class="confirm-overlay" @click.self="cancelDelete">
+        <div class="confirm-sheet">
+          <div class="confirm-icon">⚠️</div>
+          <div class="confirm-title">确认删除</div>
+          <div class="confirm-msg">
+            删除 <span class="confirm-file">{{ deleteTarget }}</span> 后，以下数据将被同步清除：
+          </div>
+          <ul class="confirm-list">
+            <li>原始健康数据（raw_health_samples）</li>
+            <li>日聚合指标（daily_metrics）</li>
+            <li>存档的 JSON 文件</li>
+          </ul>
+          <div class="confirm-warn">⚠️ 关联的周报和日分析报告不会自动删除</div>
+          <div class="confirm-actions">
+            <button class="confirm-btn cancel" @click="cancelDelete">取消</button>
+            <button class="confirm-btn delete" @click="doDelete" :disabled="deleting">
+              {{ deleting ? '删除中…' : '确认删除' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </teleport>
 
     <!-- Tips -->
     <div class="card tips">
@@ -79,7 +105,7 @@
 
 <script setup>
 import { ref, onMounted, inject } from 'vue'
-import { uploadJSON, getUploadList } from '../../api/health.js'
+import { uploadJSON, getUploadList, deleteUpload } from '../../api/health.js'
 
 const toast = inject('toast')
 
@@ -88,6 +114,11 @@ const uploading = ref(false)
 const upName = ref('')
 const result = ref(null)
 const fileList = ref([])
+
+// 删除相关状态
+const showConfirm = ref(false)
+const deleteTarget = ref(null)
+const deleting = ref(false)
 
 const doUpload = async (file) => {
   if (!file.name.endsWith('.json')) { toast('仅支持 .json 文件'); return }
@@ -115,6 +146,33 @@ const loadFiles = async () => {
 
 const fmtSize = (b) => b ? (b < 1024 ? b + ' B' : (b/1024).toFixed(1) + ' KB') : '--'
 const fmtTime = (t) => { try { return new Date(t).toLocaleString('zh-CN') } catch { return t } }
+
+// ── 删除功能 ──
+const confirmDelete = (filename) => {
+  deleteTarget.value = filename
+  showConfirm.value = true
+}
+
+const cancelDelete = () => {
+  showConfirm.value = false
+  deleteTarget.value = null
+}
+
+const doDelete = async () => {
+  if (!deleteTarget.value) return
+  deleting.value = true
+  try {
+    const r = await deleteUpload(deleteTarget.value)
+    toast(`已删除：${r.deleted}，清理 ${r.raw_deleted} 条原始数据`)
+    showConfirm.value = false
+    deleteTarget.value = null
+    loadFiles()
+  } catch (e) {
+    toast('删除失败：' + (e.message || '未知错误'))
+  } finally {
+    deleting.value = false
+  }
+}
 
 onMounted(() => loadFiles())
 </script>
@@ -167,4 +225,60 @@ onMounted(() => loadFiles())
 .tips { padding: 16px; }
 .tips-title { font-weight: 600; font-size: 14px; margin-bottom: 8px; }
 .tips ul { padding-left: 18px; font-size: 12px; color: var(--muted); line-height: 1.7; }
+
+/* Delete button */
+.fi-del {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--fg-soft); border: none; color: var(--muted);
+  font-size: 16px; cursor: pointer; flex-shrink: 0;
+  display: grid; place-items: center; transition: all 0.15s;
+}
+.fi-del:hover { background: #fee2e2; color: #ef4444; }
+
+/* Confirm overlay */
+.confirm-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,0.4); display: flex; align-items: flex-end; justify-content: center;
+  animation: fadeIn 0.2s;
+}
+.confirm-sheet {
+  width: 100%; max-width: 500px; background: var(--surface);
+  border-radius: 20px 20px 0 0; padding: 24px 20px 28px;
+  animation: slideUp 0.25s ease-out;
+}
+.confirm-icon { font-size: 40px; text-align: center; margin-bottom: 12px; }
+.confirm-title {
+  font-family: var(--font-display); font-size: 18px; font-weight: 600;
+  text-align: center; margin-bottom: 8px;
+}
+.confirm-msg { font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 12px; }
+.confirm-file {
+  font-family: var(--font-mono); font-size: 12px; color: var(--accent);
+  background: var(--accent-soft); padding: 2px 6px; border-radius: 4px;
+}
+.confirm-list {
+  list-style: none; padding: 0; margin: 0 0 12px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.confirm-list li {
+  font-size: 12px; color: var(--muted); padding: 8px 12px;
+  background: var(--fg-soft); border-radius: 8px;
+}
+.confirm-list li::before { content: '• '; color: var(--accent); }
+.confirm-warn {
+  font-size: 11px; color: #eab308; text-align: center;
+  padding: 8px; background: #fef9e7; border-radius: 8px; margin-bottom: 16px;
+}
+.confirm-actions { display: flex; gap: 10px; }
+.confirm-btn {
+  flex: 1; padding: 12px; border-radius: 12px; border: none;
+  font-family: var(--font-body); font-size: 14px; font-weight: 500;
+  cursor: pointer; transition: all 0.15s;
+}
+.confirm-btn.cancel { background: var(--fg-soft); color: var(--fg); }
+.confirm-btn.delete { background: #ef4444; color: #fff; }
+.confirm-btn.delete:disabled { opacity: 0.6; cursor: not-allowed; }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 </style>

@@ -439,3 +439,104 @@ def list_uploaded_files() -> list[dict]:
         })
 
     return files
+
+
+def delete_upload(filename: str, db: Session) -> dict:
+    """
+    删除已上传的周文件及其对应的 raw 数据和聚合数据。
+
+    流程:
+      1. 检查存档文件是否存在
+      2. 读取存档 JSON，提取日期范围
+      3. 事务：删除 raw_health_samples + daily_metrics
+      4. 提交后删除存档文件
+
+    参数:
+        filename: 原始文件名
+        db:       SQLAlchemy Session
+
+    返回:
+        {"deleted": filename, "raw_deleted": N, "daily_deleted": M, "dates": [...]}
+
+    异常:
+        FileNotFoundError — 文件不存在
+    """
+    archive_path = _archive_path(filename)
+    if not os.path.exists(archive_path):
+        raise FileNotFoundError(f"文件 {filename} 不存在")
+
+    # 读取存档 JSON，提取日期范围
+    with open(archive_path, "rb") as f:
+        file_bytes = f.read()
+
+    data = json.loads(file_bytes.decode("utf-8"))
+    metrics_raw = data.get("data", {}).get("metrics", [])
+
+    # 解析日期范围
+    dates: list[date] = []
+    for m in metrics_raw:
+        try:
+            metric = HealthMetric(**m)
+            for dp in metric.data:
+                d = _extract_date_from_dp(dp)
+                if d:
+                    dates.append(d)
+        except Exception:
+            continue
+
+    dates = sorted(set(dates))
+
+    if not dates:
+        # 无法提取日期，只删除存档文件
+        os.remove(archive_path)
+        return {
+            "deleted": filename,
+            "raw_deleted": 0,
+            "daily_deleted": 0,
+            "dates": [],
+        }
+
+    week_start = min(dates)
+    week_end = max(dates)
+    week_start_dt = datetime(week_start.year, week_start.month, week_start.day,
+                             tzinfo=timezone.utc)
+    week_end_dt = datetime(week_end.year, week_end.month, week_end.day,
+                           tzinfo=timezone.utc) + timedelta(days=1)
+
+    try:
+        # 删除 raw 数据（按日期范围）
+        raw_deleted = (
+            db.query(RawHealthSample)
+            .filter(
+                RawHealthSample.start_time >= week_start_dt,
+                RawHealthSample.start_time < week_end_dt,
+            )
+            .delete(synchronize_session=False)
+        )
+
+        # 删除 daily_metrics（按日期列表）
+        daily_deleted = (
+            db.query(DailyMetric)
+            .filter(DailyMetric.date.in_(dates))
+            .delete(synchronize_session=False)
+        )
+
+        db.commit()
+        logger.info(
+            f"Deleted upload: {filename}, raw={raw_deleted}, daily={daily_deleted}, "
+            f"dates={week_start}~{week_end}"
+        )
+    except Exception:
+        db.rollback()
+        logger.error(f"Failed to delete upload: {filename}", exc_info=True)
+        raise
+
+    # 事务成功后删除存档文件
+    os.remove(archive_path)
+
+    return {
+        "deleted": filename,
+        "raw_deleted": raw_deleted,
+        "daily_deleted": daily_deleted,
+        "dates": [str(d) for d in dates],
+    }

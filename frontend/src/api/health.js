@@ -32,3 +32,6 @@ export const uploadJSON = async (file) => {
 
 export const getUploadList = () =>
   request('/api/v1/health/upload/list')
+
+export const deleteUpload = (filename) =>
+  request(`/api/v1/health/upload/${encodeURIComponent(filename)}`, { method: 'DELETE' })

@@ -212,11 +212,22 @@
               <div class="sess-title">{{ s.first_query || s.session_id?.slice(0,16) }}</div>
               <div class="sess-meta">{{ s.turns || 0 }} 轮 · {{ (s.last_active||'').slice(0,10) }}</div>
             </div>
-            <button class="sess-del" @click.stop="removeSession(s.session_id)">
+            <button class="sess-del" @click.stop="requestDeleteSession(s.session_id, s.first_query)" title="删除会话">
               <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
           <div v-if="!sessions.length" class="empty-sess">暂无历史会话</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Session delete confirmation -->
+    <div v-if="pendingDeleteSession" class="confirm-overlay" @click="cancelDeleteSession">
+      <div class="confirm-box" @click.stop>
+        <p class="confirm-msg">确定要删除这个会话吗？<br/><span class="confirm-id">{{ pendingDeleteSession.label }}</span></p>
+        <div class="confirm-actions">
+          <button class="confirm-cancel" @click="cancelDeleteSession">取消</button>
+          <button class="confirm-ok" @click="confirmDeleteSession">确认删除</button>
         </div>
       </div>
     </div>
@@ -349,8 +360,24 @@ const removeSession = async (sid) => {
     await deleteSession(sid)
     if (currentSessionId.value === sid) newChat()
     loadSessions()
+    toast('会话已删除')
   } catch { toast('删除失败') }
 }
+
+// ── 会话删除确认 ──
+const pendingDeleteSession = ref(null)  // { sid, label }
+
+const requestDeleteSession = (sid, label) => {
+  pendingDeleteSession.value = { sid, label: label || sid?.slice(0,16) }
+}
+
+const confirmDeleteSession = async () => {
+  const sid = pendingDeleteSession.value?.sid
+  pendingDeleteSession.value = null
+  if (sid) await removeSession(sid)
+}
+
+const cancelDeleteSession = () => { pendingDeleteSession.value = null }
 
 const closeSessions = () => { showSessions.value = false }
 
@@ -676,8 +703,16 @@ onMounted(() => { loadSessions(); loadReports() })
   display: block;                     /* 块级确保 ellipsis 生效 */
 }
 .sess-meta { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: var(--font-mono); }
-.sess-del { width: 24px; height: 24px; border-radius: 50%; border: 0; background: none; color: var(--muted); cursor: pointer; display: grid; place-items: center; flex-shrink: 0; }
-.sess-del:active { color: #dc2626; }
+.sess-del {
+  width: 28px; height: 28px; border-radius: 50%; border: 0;
+  background: transparent; color: var(--muted); cursor: pointer;
+  display: grid; place-items: center; flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.sess-del svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+.sess-del:hover { color: #dc2626; background: color-mix(in oklch, #dc2626 10%, transparent); }
+.sess-del:active { color: #dc2626; background: color-mix(in oklch, #dc2626 16%, transparent); }
 .empty-sess { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 13px; }
 
 /* ── Delete confirmation overlay ── */

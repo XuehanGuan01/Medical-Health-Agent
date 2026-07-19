@@ -496,10 +496,103 @@ def get_status(db: Session = Depends(get_db)):
 
 
 # ============================================================
-# Phase 3+4: Agent 对话 & 记忆端点
+# 模型设置 — 运行时动态切换 LLM
 # ============================================================
 
 from pydantic import BaseModel as PydanticBaseModel
+
+
+class ChangeModelRequest(PydanticBaseModel):
+    provider: str  # PROVIDER_CONFIGS 中的 key，如 "qwen3.7-max", "deepseek-v4-pro"
+
+
+@app.get("/api/v1/settings/models")
+def list_models():
+    """
+    获取所有可用模型列表（前端下拉菜单数据源）。
+
+    返回按 series 分组的模型列表，标记当前选中的模型和 API Key 可用性。
+    """
+    from config.llm import model_manager
+    providers = model_manager.list_available_providers()
+    current = model_manager.get_provider()
+
+    # 按 series 分组
+    grouped = {}
+    for p in providers:
+        series = p["series"]
+        if series not in grouped:
+            grouped[series] = []
+        grouped[series].append({
+            "key": p["key"],
+            "model_name": p["model_name"],
+            "desc": p["desc"],
+            "available": p["available"],
+            "is_current": p["key"] == current,
+        })
+
+    return {
+        "current": current,
+        "grouped": grouped,
+        "total": len(providers),
+    }
+
+
+@app.get("/api/v1/settings/model")
+def get_current_model():
+    """获取当前正在使用的模型信息。"""
+    from config.llm import model_manager, PROVIDER_CONFIGS
+    current = model_manager.get_provider()
+    cfg = PROVIDER_CONFIGS.get(current, {})
+    return {
+        "provider": current,
+        "model_name": cfg.get("model_name", ""),
+        "desc": cfg.get("desc", ""),
+        "series": cfg.get("series", "other"),
+    }
+
+
+@app.post("/api/v1/settings/model")
+def change_model(req: ChangeModelRequest):
+    """
+    动态切换模型，无需重启后端即时生效。
+
+    切换后所有后续的 /api/v1/chat 请求将使用新模型。
+    """
+    from config.llm import model_manager
+    try:
+        result = model_manager.set_provider(req.provider)
+        return {
+            "status": "ok",
+            "message": f"模型已切换: {result['previous']} → {result['current']}",
+            **result,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.get("/api/v1/settings/model/history")
+def get_model_history():
+    """获取模型切换历史记录。"""
+    from config.llm import model_manager
+    return {"history": model_manager.get_history()}
+
+
+@app.post("/api/v1/settings/model/test")
+def test_model(req: ChangeModelRequest):
+    """测试指定模型的连通性（发送一条简短消息验证）。"""
+    from config.llm import test_one_provider
+    result = test_one_provider(req.provider)
+    if not result["ok"]:
+        return {"status": "error", **result}
+    return {"status": "ok", **result}
+
+
+# ============================================================
+# Phase 3+4: Agent 对话 & 记忆端点
+# ============================================================
 
 
 class ChatRequest(PydanticBaseModel):
@@ -637,7 +730,6 @@ def get_health_trend(
 def upload_weekly_json(
     file: UploadFile = File(..., description="Health Auto Export 导出的 JSON 文件"),
     db: Session = Depends(get_db),
-    _token: str = Depends(verify_api_key),
 ):
     """
     接收每周 Health Auto Export JSON 文件 → 校验 → 入库 → 聚合 → 存档。
@@ -686,9 +778,7 @@ def upload_weekly_json(
 
 
 @app.get("/api/v1/health/upload/list")
-def list_uploaded_files_endpoint(
-    _token: str = Depends(verify_api_key),
-):
+def list_uploaded_files_endpoint():
     """查询已导入的周文件列表（扫描 data/weekly_raw/ 目录）"""
     from .upload_handler import list_uploaded_files
     files = list_uploaded_files()
@@ -696,6 +786,115 @@ def list_uploaded_files_endpoint(
         "count": len(files),
         "directory": os.getenv("WEEKLY_RAW_DIR", "data/weekly_raw"),
         "files": files,
+    }
+
+
+@app.delete("/api/v1/health/upload/{filename}")
+def delete_uploaded_file(filename: str, db: Session = Depends(get_db)):
+    """
+    删除已上传的周文件及其对应的 raw 数据和聚合数据。
+
+    联动删除流程（方案A：基于日期范围匹配）：
+      1. 检查存档文件是否存在
+      2. 读取存档 JSON，提取日期范围
+      3. 事务：删除 raw_health_samples + daily_metrics
+      4. 提交后删除存档文件
+
+    返回:
+        {"deleted": filename, "raw_deleted": N, "daily_deleted": M, "dates": [...]}
+    """
+    from .upload_handler import delete_upload
+
+    try:
+        result = delete_upload(filename=filename, db=db)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Delete failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"删除失败: {e}")
+
+    return result
+
+
+# ============================================================
+# 日历看板：按月批量查询日聚合数据
+# ============================================================
+
+@app.get("/api/v1/health/daily/batch")
+def get_daily_batch(
+    month: str = Query(..., description="月份 YYYY-MM，如 2026-07"),
+    db: Session = Depends(get_db),
+):
+    """
+    按月批量查询日聚合数据，用于日历看板展示。
+
+    返回该月每天的核心指标摘要，格式：
+    {
+      "month": "2026-07",
+      "days": {
+        "2026-07-01": {
+          "heart_rate": {"avg": 72, "min": 58, "max": 95},
+          "step_count": {"total": 8234},
+          ...
+        },
+        ...
+      }
+    }
+    """
+    from datetime import date as dt_date
+    from calendar import monthrange
+
+    try:
+        year, mon = map(int, month.split("-"))
+        if mon < 1 or mon > 12:
+            raise ValueError
+    except Exception:
+        raise HTTPException(status_code=400, detail=f"月份格式错误: {month}，应为 YYYY-MM")
+
+    # 计算该月的日期范围
+    _, days_in_month = monthrange(year, mon)
+    start_date = dt_date(year, mon, 1)
+    end_date = dt_date(year, mon, days_in_month)
+
+    # 批量查询该月所有 daily_metrics
+    rows = (
+        db.query(DailyMetric)
+        .filter(
+            DailyMetric.date >= start_date,
+            DailyMetric.date <= end_date,
+        )
+        .all()
+    )
+
+    # 按日期分组
+    days = {}
+    for r in rows:
+        date_str = str(r.date)
+        if date_str not in days:
+            days[date_str] = {}
+
+        # 只返回核心指标（日历卡片展示用）
+        CORE_METRICS = {
+            "heart_rate", "resting_heart_rate", "heart_rate_variability",
+            "step_count", "active_energy", "basal_energy_burned",
+            "sleep_analysis", "respiratory_rate", "walking_running_distance",
+            "apple_exercise_time", "flights_climbed", "vo2_max",
+        }
+
+        if r.metric_type in CORE_METRICS:
+            days[date_str][r.metric_type] = {
+                "avg": r.avg_value,
+                "min": r.min_value,
+                "max": r.max_value,
+                "total": r.total_value,
+                "samples": r.sample_count,
+                "unit": r.unit,
+            }
+
+    return {
+        "month": month,
+        "days_in_month": days_in_month,
+        "days": days,
     }
 
 
