@@ -1,3 +1,5 @@
+
+
 # Medical-Health-Agent
 
 > AI 个人健康管家 — Apple Health 数据同步 + 华佗 RAG 医疗知识库 + LangGraph 多 Agent 协作
@@ -218,6 +220,7 @@ npm run dev
 | Method | Path | 说明 |
 |--------|------|------|
 | `POST` | `/api/v1/chat` | 多轮对话（含 Self-RAG） |
+| `GET` | `/api/v1/chat/progress?session_id=X` | 查询对话生成进度 |
 | `GET` | `/api/v1/memory/sessions` | 会话列表 |
 | `GET` | `/api/v1/memory/history?session_id=X` | 对话历史 |
 | `DELETE` | `/api/v1/memory/sessions/{id}` | 清除会话 |
